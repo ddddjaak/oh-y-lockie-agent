@@ -1,0 +1,181 @@
+/*
+ * Zephyr-style CSS for Doxygen HTML output.
+ * Mimics https://docs.zephyrproject.org/latest/ ReadTheDocs theme.
+ *
+ * Placeholders are replaced by the configure script:
+ *   {{PROJECT_LOGO_PATH}}  - optional logo URL, empty string to hide
+ */
+
+:root {
+  --zephyr-blue: #3D578C;
+  --zephyr-link: #2980B9;
+  --sidebar-bg: #f8f8f8;
+  --sidebar-border: #e7e7e7;
+  --sidebar-active: #e0e0e0;
+  --code-bg: #f3f3f3;
+  --code-border: #e1e4e5;
+  --text-color: #404040;
+  --heading-color: #333;
+}
+
+/* ====== Base ====== */
+body, table, div, p, dl {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-color);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--heading-color);
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+h1 { font-size: 2em; border-bottom: 2px solid var(--zephyr-blue); padding-bottom: 0.3em; }
+h2 { font-size: 1.6em; }
+h3 { font-size: 1.3em; }
+h4 { font-size: 1.1em; }
+
+a { color: var(--zephyr-link); text-decoration: none; }
+a:hover { color: #1a5f8a; text-decoration: underline; }
+
+/* ====== Title Area (compact banner, logo on left) ====== */
+#titlearea {
+  background: var(--zephyr-blue);
+  padding: 0 16px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+#titlearea table, #titlearea tbody, #titlearea tr, #titlearea td {
+  background: transparent; border: none; margin: 0; padding: 0;
+}
+#projectname, #projectbrief, #projectnumber, #projectalign { display: none; }
+#projectlogo { vertical-align: middle; padding: 0; }
+#projectlogo img { display: block; max-height: 28px; width: auto; }
+
+/* ====== Navigation Bar (blue, below banner) ====== */
+.tablist, .sm-dox {
+  background: #2c6faa;
+  background-image: none;
+  border-bottom: 3px solid #1a5a8a;
+}
+.tablist a, .sm-dox a {
+  color: white;
+  text-shadow: none;
+  font-size: 14px;
+  background-image: none;
+}
+.tablist a:hover, .sm-dox a:hover {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  text-decoration: none;
+}
+.sm-dox a span.sub-arrow { border-top-color: white; }
+.sm-dox ul a {
+  color: var(--text-color);
+  background-color: white;
+  background-image: none;
+}
+.sm-dox ul a:hover, .sm-dox ul a.highlighted {
+  background-color: var(--sidebar-bg);
+  color: var(--zephyr-link);
+}
+
+/* ====== Treeview Sidebar ====== */
+#nav-tree {
+  background: var(--sidebar-bg);
+  background-image: none;
+  border-right: 1px solid var(--sidebar-border);
+}
+#nav-tree .item { font-size: 14px; line-height: 1.5; color: var(--text-color); }
+#nav-tree .selected {
+  background: var(--sidebar-active);
+  background-image: none;
+  text-shadow: none;
+  color: var(--zephyr-link);
+  font-weight: 600;
+}
+#nav-tree a { color: var(--text-color); }
+#nav-tree a:hover { color: var(--zephyr-link); }
+#nav-sync { display: none; }
+
+/* ====== Content Area ====== */
+#doc-content { max-width: 900px; padding: 1em 2em; }
+div.header {
+  background-image: none;
+  background-color: white;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 0.5em;
+  margin-bottom: 1em;
+}
+div.summary { margin-right: 0; float: none; }
+
+/* ====== Code Blocks ====== */
+code, pre.fragment, div.fragment {
+  font-family: "SF Mono", Monaco, Menlo, Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+}
+code {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+pre.fragment, div.fragment {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  padding: 1em;
+  line-height: 1.45;
+  overflow-x: auto;
+}
+
+/* ====== Tables ====== */
+table.doxtable, table.markdownTable {
+  border-collapse: collapse; margin: 1em 0; width: 100%;
+}
+table.doxtable th, table.markdownTable th {
+  background: var(--sidebar-bg);
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  text-align: left; font-weight: 600;
+}
+table.doxtable td, table.markdownTable td {
+  border: 1px solid #ddd; padding: 8px 12px;
+}
+
+/* ====== Footer ====== */
+#nav-path { display: none; }
+#footer {
+  max-width: 900px;
+  margin: 2em auto 0 auto; padding: 1em 2em;
+  border-top: 1px solid #e0e0e0;
+  color: #888; font-size: 0.85em; text-align: left;
+}
+
+/* ====== Search Box ====== */
+#MSearchBox {
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.12);
+}
+#MSearchBox .left { background: none; }
+#MSearchField { color: white; }
+#MSearchField::placeholder { color: rgba(255,255,255,0.6); }
+
+/* ====== Responsive ====== */
+@media (max-width: 768px) {
+  #doc-content { padding: 0.5em 1em; }
+  #titlearea { padding: 8px 10px; }
+}
+
+/* ====== Page navigation ====== */
+.navpath ul {
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+  font-size: 13px;
+}

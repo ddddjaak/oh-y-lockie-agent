@@ -1,0 +1,53 @@
+{
+  "name": "oh-y-lockie-agent",
+  "version": "2.0.0",
+  "description": "芯片系统架构师 + 嵌入式工程师双管线智能编排插件 — OpenCode即插即用。含2主Agent+14Subagent+21Command+60Skill。",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "agents",
+    "commands",
+    "skills",
+    "references",
+    "config/oh-y-lockie-agent.jsonc",
+    "AGENTS.md",
+    "scripts/postinstall.mjs",
+    "scripts/preuninstall.mjs"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "node scripts/postinstall.mjs",
+    "preuninstall": "node scripts/preuninstall.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "chip",
+    "embedded",
+    "se",
+    "ae"
+  ],
+  "author": "y-lockie",
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.17.0",
+    "@opencode-ai/sdk": "^1.17.0",
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.8",
+    "vitest": "^4.1.10"
+  }
+}

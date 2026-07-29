@@ -1,0 +1,12 @@
+src/
+tsconfig.json
+.gitignore
+.npmignore
+install.ps1
+install.sh
+install_bom.ps1
+uninstall.ps1
+uninstall.sh
+README.md
+VERSION
+manifest.json
