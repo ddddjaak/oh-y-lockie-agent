@@ -21,7 +21,7 @@
 
 - [OpenCode](https://opencode.ai) >= 1.0
 - Node.js >= 20
-- 一个已在 `opencode.json` 中配置好的 provider（如 `chipsea-api`）
+- 一个已在 `opencode.json` 中配置好的 provider（如 `openai`、`azure` 等）
 
 ### 步骤
 
@@ -40,7 +40,7 @@ npm install -g --ignore-scripts ./oh-y-lockie-agent-2.0.0.tgz
 
 # 5. 替换 provider 名称
 #    config/oh-y-lockie-agent.jsonc 中所有 "your-provider/" 改为实际 provider
-#    （如 "chipsea-api/"、"openai/" 等）
+#    （如 "openai/"、"azure/" 等）
 
 # 6. 重启 OpenCode
 ```
@@ -267,8 +267,8 @@ npm install -g --ignore-scripts ./oh-y-lockie-agent-2.0.0.tgz
 // 修改前
 "model": "your-provider/qwen3.7-plus"
 
-// 修改后（假设 provider 名为 chipsea-api）
-"model": "chipsea-api/qwen3.7-plus"
+// 修改后（假设 provider 名为 openai）
+"model": "openai/qwen3.7-plus"
 ```
 
 ### 用户级覆盖
@@ -279,7 +279,7 @@ npm install -g --ignore-scripts ./oh-y-lockie-agent-2.0.0.tgz
 {
   "agent": {
     "architect": {
-      "model": "chipsea-api/glm-5.1"      // 只覆盖 architect 的模型
+      "model": "openai/glm-5.1"      // 只覆盖 architect 的模型
     }
   }
 }

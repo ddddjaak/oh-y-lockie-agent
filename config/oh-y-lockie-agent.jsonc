@@ -14,7 +14,7 @@
   // 【使用步骤】:
   //   1. 将本文件复制到 .opencode/ 或 ~/.config/opencode/
   //   2. 将所有的 "your-provider" 替换为你在 opencode.json 中实际配置的 provider 名称
-  //      （例如 "chipsea-api"、"openai"、"azure" 等）
+  //      （例如 "openai"、"azure" 等）
   //   3. 确认模型名称与你的 API 端点支持的模型一致
   // =========================================================================
 
