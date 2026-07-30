@@ -1,6 +1,6 @@
 ---
 name: hardware-architecture-design
-description: 硬件板级架构设计：引脚分配、电压域、电源树、PCB叠层约束、信号完整性、器件选型。Hardware board-level architecture — pin assignments, voltage domains, power tree, PCB stack-up constraints, signal integrity analysis, and component selection criteria. Use when the user says 硬件架构, 引脚分配, 电源树, PCB约束, hardware architecture, pin assignment, power tree, or when system architecture and HW requirements are confirmed and board-level design can begin. NOT for system-level architecture (use architecture-design) or firmware architecture (use software-architecture-design).
+description: 硬件板级架构设计：PCB叠层约束、信号完整性、器件选型、阻抗与端接、EMC与热约束。Hardware board-level architecture — PCB stack-up constraints, signal integrity analysis, component selection criteria, impedance and termination, EMC and thermal constraints. Use when the user says 硬件架构, PCB约束, 信号完整性, 器件选型, hardware architecture, PCB constraints, signal integrity, component selection, or when system architecture and HW requirements are confirmed and board-level design can begin. NOT for system-level architecture (use architecture-design), firmware architecture (use software-architecture-design), pin multiplexing, or power architecture.
 ---
 
 # Hardware Architecture Design

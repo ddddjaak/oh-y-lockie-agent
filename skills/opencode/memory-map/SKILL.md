@@ -1,18 +1,20 @@
 ---
-description: 设计内存映射：Flash分区、SRAM分配、外设地址布局、MPU配置、链接脚本片段
-agent: build
+name: memory-map
+description: 内存映射设计（Memory Map）：Flash 分区、SRAM 分配、外设地址布局、存储保护区域与访问权限配置、链接脚本片段生成。Memory map design — Flash partition layout, SRAM region allocation, peripheral address space, memory-protection region configuration, and linker script fragment synthesis. Use when the user says 内存映射, memory map, 链接脚本, 内存布局, 地址空间, Flash分区, 或需要为嵌入式系统生成内存映射与链接器片段。
 ---
-# /memory-map — Memory Map Designer
+
+# Memory Map Designer (内存映射设计)
 
 ## Overview
 
-Produces a complete memory map for an embedded system: Flash partition layout, SRAM region allocation, peripheral address space, MPU region configuration, and linker script fragments. Delegates analysis and generation to the `@memory-map-specialist` agent.
+Produces a complete memory map for an embedded system: Flash partition layout, SRAM region allocation, peripheral address space, memory-protection region configuration, and linker script fragments. Delegates analysis and generation to the `@memory-map-specialist` agent.
 
-## Usage
+## When to Use
 
-```
-/memory-map <mcu-part-number> <--datasheet path> [--bootloader-size <KB>] [--app-size <KB>]
-```
+- A new MCU/SoC project needs its Flash and SRAM carved up into bootloader / application / storage regions
+- A linker script (MEMORY / SECTIONS) must be synthesized from the memory map
+- MPU regions with per-privilege access permissions must be defined
+- A dual-bank OTA layout requires both banks to share an identical partition map
 
 ## Workflow
 
@@ -33,7 +35,7 @@ Spawn the specialist with all gathered inputs. The prompt must include:
   1. **Flash Map** — partition table: bootloader, application, OTA slot (if dual-bank), persistent storage, calibration data, option bytes
   2. **SRAM Map** — region allocation: vector table, .data/.bss, heap, main stack, process stack, IPC shared memory, DMA buffers
   3. **Peripheral Address Map** — base addresses for all peripherals used, gap verification, reserved region documentation
-  4. **MPU Configuration** — region definitions with access permissions (read/write/execute) per privilege level, subregion disable bits if needed
+  4. **Memory-Protection Region Configuration** — region definitions with access permissions (read/write/execute) per privilege level, subregion disable bits if needed
   5. **Linker Script Fragment** — synthesized MEMORY{} and basic SECTIONS{} blocks
 
 ### Phase 3 — Verify Against Datasheet

@@ -1,18 +1,20 @@
 ---
-description: 引脚复用分配：外设功能映射、复用冲突检测、电气兼容性检查、备用功能表生成
-agent: build
+name: pinmux
+description: 引脚复用分配（Pin Multiplexing）：外设功能到引脚的映射、复用冲突检测、电气兼容性检查、备用功能（AF）表生成、未用引脚终止策略。Pin multiplexing assignment — peripheral-to-pin function mapping, alternate-function conflict detection, electrical compatibility verification, and alternate-function table generation. Use when the user says 引脚复用, pinmux, 引脚分配, 引脚映射, 复用冲突, 或需要从芯片数据手册生成 GPIO 初始化表与 AF 配置。
 ---
-# /pinmux — Pin Multiplexing Assignment
+
+# Pin Multiplexing Assignment (引脚复用分配)
 
 ## Overview
 
 Produces a complete pin multiplexing assignment for an MCU/SoC: peripheral-to-pin function mapping, conflict detection across alternative functions, electrical compatibility verification, and a generated alternate-function table. Delegates the assignment logic to the `@hw-domain-expert` agent.
 
-## Usage
+## When to Use
 
-```
-/pinmux <mcu-part-number> <--datasheet path> <--rm path> <--peripheral-list path>
-```
+- Starting a new board or board revision and need to assign every peripheral signal to a physical pin
+- A data sheet pinout must be turned into a validated pin table + GPIO init configuration
+- Two peripherals appear to want the same pin (real or potential conflict) and a resolution is needed
+- Unused pins must get a safe, leakage-minimizing termination recommendation
 
 ## Workflow
 

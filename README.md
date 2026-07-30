@@ -4,7 +4,7 @@
 
 ## 概述
 
-`oh-y-lockie-agent` 是一个 **OpenCode Plugin**（非 install 脚本方式），提供**两个主 Agent**，共享同一套 **14 个专项 Subagent**、**21 个 Commands** 和 **58 个 Skills**（51 个 opencode 端 + 7 个 agents 端）：
+`oh-y-lockie-agent` 是一个 **OpenCode Plugin**（非 install 脚本方式），提供**两个主 Agent**，共享同一套 **14 个专项 Subagent** 和 **62 个 Skills**（55 个 opencode 端 + 7 个 agents 端）：
 
 | 主 Agent | 管线 | 适用场景 |
 |----------|------|----------|
@@ -38,9 +38,8 @@ npm install -g --ignore-scripts ./oh-y-lockie-agent-2.0.0.tgz
 # 4. 编辑 ~/.config/opencode/opencode.json，在 plugin 数组中加入插件名：
 #    "plugin": ["oh-my-openagent", "oh-y-lockie-agent"]
 
-# 5. 替换 provider 名称
-#    config/oh-y-lockie-agent.jsonc 中所有 "your-provider/" 改为实际 provider
-#    （如 "openai/"、"azure/" 等）
+# 5. （可选）在 config/oh-y-lockie-agent.jsonc 中覆盖 agent 模型
+#    默认已配置为 ddddjaak/mimo-v2.5（标准）与 ddddjaak/mimo-v2.5-pro（Pro）
 
 # 6. 重启 OpenCode
 ```
@@ -49,15 +48,11 @@ npm install -g --ignore-scripts ./oh-y-lockie-agent-2.0.0.tgz
 
 全局安装后，postinstall 脚本会自动将以下内容复制到对应目录：
 
-| 源目录 | 目标目录 |
-|--------|----------|
-| `agents/` | `~/.config/opencode/agents/` |
-| `commands/` | `~/.config/opencode/commands/` |
-| `skills/opencode/` | `~/.config/opencode/skills/` |
-| `skills/agents/` | `~/.agents/skills/` |
-| `references/` | `~/.config/opencode/references/` |
-| `AGENTS.md` | `~/AGENTS.md`（如不存在） |
-| `config/oh-y-lockie-agent.jsonc` | `~/.config/opencode/oh-y-lockie-agent.jsonc`（如不存在） |
+| 源目录 | 目标目录 | 说明 |
+|--------|----------|------|
+| `opencode.json` (MCP 段) | `~/.config/opencode/opencode.json` | 注入缺失的 MCP 服务器（不覆盖已有项） |
+
+> `agents/` `skills/` `references/` 由插件 config hook 从插件目录**注入**，不复制。
 
 ---
 
@@ -68,23 +63,22 @@ oh-y-lockie-agent (Plugin)
 │
 ├── src/
 │   ├── index.ts          # OpenCode Plugin 入口
-│   │   ├── config hook       ── 注入 agent 定义 + MCP 配置
+│   │   ├── config hook       ── collectAgents() 注入 agent + MCP 配置
 │   │   ├── chat.message hook ── 意图分类 → 自动路由 skill
 │   │   ├── experimental.chat.system.transform hook
 │   │   │                       ── 注入 Skill Routing Table 到 system prompt
-│   │   ├── shell.env hook    ── 检测 CMake 项目
 │   │   └── tool              ── lockie_list_agents
 │   │
-│   ├── config.ts         # 配置加载链（jsonc 解析 + 优先级合并）
+│   ├── config.ts         # 配置加载（3 级优先级链 + 合并 overrides/mcp）
 │   ├── skills.ts         # Skill 匹配引擎（关键词提取 + 评分匹配）
+│   ├── agents/            # Agent 注册表（factory + registry 结构）
 │   └── __tests__/        # 单元测试（vitest）
 │
 ├── config/
-│   └── oh-y-lockie-agent.jsonc   # 默认配置（agent 定义 + MCP）
+│   └── oh-y-lockie-agent.jsonc   # 默认配置（agent model 覆盖 + MCP）
 │
 ├── agents/      # 16 个 agent prompt 文件
-├── commands/    # 21 个命令定义
-├── skills/      # 58 个 skill 定义
+├── skills/      # 62 个 skill 定义
 ├── references/  # 5 个参考文档
 └── scripts/     # postinstall / preuninstall
 ```
@@ -114,7 +108,6 @@ oh-y-lockie-agent (Plugin)
 |------|------|------|
 | 主 Agents | 2 | Architect（SE 管线）+ Firmware（AE 管线） |
 | Subagents | 14 | 专项 review/audit/design 子代理 |
-| Commands | 21 | 斜杠命令（含 fan-out 并行编排） |
 | Skills | 58 | 专业领域能力（51 opencode + 7 agents） |
 
 ### 主 Agent 对比
@@ -124,8 +117,8 @@ oh-y-lockie-agent (Plugin)
 | **颜色** | 🟢 绿色 | 🔵 蓝色 |
 | **管线** | Define→Design→Document→Verify→Validate | Concept→Spec→Plan→Code→Test→Review→Ship |
 | **核心场景** | 芯片系统设计、架构评审、规格制定 | 嵌入式固件开发、驱动编写、RTOS 调试 |
-| **默认** | ✅ primary | 备选 |
-| **模型** | `your-provider/qwen3.7-plus` | `your-provider/qwen3.7-plus` |
+| **默认** | ✅ primary | ✅ primary |
+| **模型** | `ddddjaak/mimo-v2.5` | `ddddjaak/mimo-v2.5` |
 
 **切换方式：** 在 OpenCode 中按 **Tab** 键，即可在 Architect (SE) 和 Firmware (AE) 之间切换。
 
@@ -133,48 +126,27 @@ oh-y-lockie-agent (Plugin)
 
 | Subagent | 职责 | 默认模型 |
 |----------|------|----------|
-| `code-reviewer` | 五维度代码审查（正确性/可读性/架构/安全/性能） | deepseek-v4-pro |
-| `security-auditor` | 安全审计：安全启动、加密、密钥管理、通信安全 | deepseek-v4-pro |
-| `system-architect` | 系统架构审查：模块边界、接口契约、约束分析 | deepseek-v4-pro |
-| `test-engineer` | 可测试性审查、测试覆盖率和测试策略 | qwen3.6-flash |
-| `verification-engineer` | 设计方案完整性和一致性验证，追溯矩阵审查 | qwen3.6-flash |
-| `fw-domain-expert` | 固件领域审查：RTOS配置、驱动设计、内存规划 | qwen3.7-plus |
-| `hw-domain-expert` | 硬件设计审查：引脚分配、电源树、时钟树、PCB布局约束 | qwen3.7-plus |
-| `compliance-reviewer` | 合规审查：行业标准、法规要求、安全规范 | qwen3.6-flash |
-| `power-architect` | 电源架构设计：电源树、电压域、上电时序、电流预算 | deepseek-v4-pro |
-| `boot-bringup-specialist` | 启动与bring-up：启动序列、Boot ROM验证、首次上电检查 | deepseek-v4-pro |
-| `memory-map-specialist` | 内存映射设计：Flash分区、SRAM分配、MPU配置、链接脚本 | deepseek-v4-pro |
-| `firmware-architect` | 固件架构设计：任务分解、IPC拓扑、HAL分层、状态机 | qwen3.7-plus |
-| `timing-analyst` | 时序分析：时钟树、PLL配置、建立/保持时序、抖动预算 | deepseek-v4-pro |
-| `register-map-generator` | 寄存器映射生成：从数据手册提取寄存器定义、验证对齐 | qwen3.6-plus |
+| `code-reviewer` | 五维度代码审查（正确性/可读性/架构/安全/性能） | ddddjaak/mimo-v2.5-pro |
+| `security-auditor` | 安全审计：安全启动、加密、密钥管理、通信安全 | ddddjaak/mimo-v2.5-pro |
+| `system-architect` | 系统架构审查：模块边界、接口契约、约束分析 | ddddjaak/mimo-v2.5-pro |
+| `test-engineer` | 可测试性审查、测试覆盖率和测试策略 | ddddjaak/mimo-v2.5 |
+| `verification-engineer` | 设计方案完整性和一致性验证，追溯矩阵审查 | ddddjaak/mimo-v2.5 |
+| `fw-domain-expert` | 固件领域审查：RTOS配置、驱动设计、内存规划 | ddddjaak/mimo-v2.5 |
+| `hw-domain-expert` | 硬件设计审查：引脚分配、电源树、时钟树、PCB布局约束 | ddddjaak/mimo-v2.5 |
+| `compliance-reviewer` | 合规审查：行业标准、法规要求、安全规范 | ddddjaak/mimo-v2.5 |
+| `power-architect` | 电源架构设计：电源树、电压域、上电时序、电流预算 | ddddjaak/mimo-v2.5-pro |
+| `boot-bringup-specialist` | 启动与bring-up：启动序列、Boot ROM验证、首次上电检查 | ddddjaak/mimo-v2.5-pro |
+| `memory-map-specialist` | 内存映射设计：Flash分区、SRAM分配、MPU配置、链接脚本 | ddddjaak/mimo-v2.5-pro |
+| `firmware-architect` | 固件架构设计：任务分解、IPC拓扑、HAL分层、状态机 | ddddjaak/mimo-v2.5 |
+| `timing-analyst` | 时序分析：时钟树、PLL配置、建立/保持时序、抖动预算 | ddddjaak/mimo-v2.5-pro |
+| `register-map-generator` | 寄存器映射生成：从数据手册提取寄存器定义、验证对齐 | ddddjaak/mimo-v2.5 |
 
-### Commands 清单
+### 命令层（已移除）
 
-| 命令 | 功能 |
-|---|---|
-| `/review` | 五轴代码审查 |
-| `/ship` | 并行审查（code-reviewer + security-auditor + test-engineer 同时执行） |
-| `/test` | TDD 测试驱动开发 |
-| `/plan` | 任务分解 |
-| `/build` | 构建 |
-| `/spec` | 规格编写 |
-| `/se-requirements` | 需求分解 |
-| `/se-architecture` | 架构设计 |
-| `/se-spec` | 规格文档生成 |
-| `/se-review` | 四视角设计审查 |
-| `/se-traceability` | 追溯矩阵 |
-| `/se-goal` | 目标定义 |
-| `/code-simplify` | 代码简化 |
-| `/bringup` | 板级bring-up计划生成 |
-| `/memory-map` | 内存映射设计 |
-| `/power-tree` | 电源架构设计 |
-| `/clock-tree` | 时钟树设计 |
-| `/pinmux` | 引脚复用分配 |
-| `/register-map` | 寄存器映射生成 |
-| `/boot-sequence` | 启动序列设计 |
-| `/fault-analysis` | 故障分析（HardFault/MemManage/BusFault等） |
+> 自 v2.0.0 起 slash command 层已移除，能力全部由 Skill 通过自然语言触发（例如「进行架构评审」「帮我做引脚复用分配」「生成内存映射」）。无需记忆 `/xxx` 命令名。
 
-### Skills 清单（58 个）
+### Skills 清单
+### Skills 清单（62 个）
 
 | 类别 | Skills |
 |------|--------|
@@ -207,19 +179,19 @@ oh-y-lockie-agent/
 │   ├── index.ts                  # 插件主入口
 │   ├── config.ts                 # 配置加载链
 │   ├── skills.ts                 # Skill 匹配引擎
+│   ├── agents/                   # Agent 注册表（factory + registry 结构）
 │   └── __tests__/                # 单元测试
 │
 ├── dist/                         # 编译产物（不提交到 git）
 │
 ├── config/
-│   └── oh-y-lockie-agent.jsonc   # 默认 agent 配置 + MCP 配置
+│   └── oh-y-lockie-agent.jsonc   # 默认 agent model 覆盖 + MCP 配置
 │
 ├── agents/                       # 16 个 agent prompt 文件
-├── commands/                     # 21 个命令定义文件
 ├── references/                   # 5 个参考文档
 │
 ├── skills/
-│   ├── opencode/                 # 51 个 opencode 端 skill
+│   ├── opencode/                 # 55 个 opencode 端 skill
 │   └── agents/                   # 7 个 agents 端 skill
 │
 └── scripts/
@@ -259,16 +231,13 @@ npm install -g --ignore-scripts ./oh-y-lockie-agent-2.0.0.tgz
 
 ## 配置
 
-### 替换 provider
+### 模型配置
 
-`config/oh-y-lockie-agent.jsonc` 中所有 `your-provider/` 前缀需替换为你在 `opencode.json` 中配置的实际 provider 名称：
+Agent 的默认模型在 `src/agents/definitions.ts` 中通过 `defaultModel` 定义（标准 `ddddjaak/mimo-v2.5`、Pro `ddddjaak/mimo-v2.5-pro`）。如需更换 provider 或模型，在 `config/oh-y-lockie-agent.jsonc` 的 `agent.<name>.model` 覆盖即可，例如：
 
 ```jsonc
-// 修改前
-"model": "your-provider/qwen3.7-plus"
-
-// 修改后（假设 provider 名为 openai）
-"model": "openai/qwen3.7-plus"
+// 把 architect 换成 openai 的模型
+"architect": { "model": "openai/glm-5.1" }
 ```
 
 ### 用户级覆盖
@@ -309,7 +278,7 @@ npm install -g --ignore-scripts ./oh-y-lockie-agent-2.0.0.tgz
 npm uninstall -g oh-y-lockie-agent
 ```
 
-`preuninstall.mjs` 会自动清理 `~/.config/opencode/agents/`、`~/.config/opencode/commands/`、`~/.config/opencode/skills/`、`~/.config/opencode/references/`、`~/.agents/skills/` 中属于本插件的文件。
+`preuninstall.mjs` 会自动清理 `~/.config/opencode/agents/`、`~/.config/opencode/skills/`、`~/.config/opencode/references/`、`~/.agents/skills/` 中属于本插件的文件。
 
 完成后重启 OpenCode。
 

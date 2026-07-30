@@ -1,18 +1,36 @@
 import type { PluginInput, Hooks, Config, PluginModule } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin/tool";
 import { z } from "zod";
-import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 
-import { loadPluginConfig, buildAgentCategoryMap, getActiveAgentKeys, getAgentKeys } from "./config.js";
-import type { AgentDef } from "./config.js";
+import { loadPluginConfig } from "./config.js";
+import {
+  collectAgents,
+  getAgentKeys,
+  getActiveAgentKeys,
+  buildAgentCategoryMap,
+  agentSources,
+} from "./agents/index.js";
+import type { AgentOverride } from "./agents/types.js";
 import { buildSkillTable, matchSkill, SKILL_ROUTE_TABLE, ROUTE_MARKER } from "./skills.js";
 import type { SkillEntry } from "./skills.js";
+import { diagnoseMcpStatus } from "./mcp.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
+
+function getPkgVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(PKG_ROOT, "package.json"), "utf8"));
+    return pkg.version || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+const PKG_VERSION = getPkgVersion();
 
 // ─── Module-level state ──────────────────────────────────────────
 
@@ -26,10 +44,9 @@ const lockieListAgentsTool = tool({
     category: z.enum(["all", "design", "review", "domain", "quality"]).optional().default("all"),
   },
   async execute(args) {
-    // We need the agent config to build the category map.
-    // At tool-call time we re-read the config (it's hot-reload safe).
-    const { agent: agentConfig } = loadPluginConfig();
-    const categories = buildAgentCategoryMap(agentConfig);
+    // Re-read config at tool-call time so overrides are hot-reload safe.
+    const { overrides } = loadPluginConfig();
+    const categories = buildAgentCategoryMap(overrides);
 
     const cat = args.category || "all";
     if (cat === "all") {
@@ -39,7 +56,7 @@ const lockieListAgentsTool = tool({
       const domain = categories.domain.join(", ");
       const quality = categories.quality.join(", ");
       return (
-        `oh-y-lockie-agent v2.0.0 提供:\n` +
+        `oh-y-lockie-agent v${PKG_VERSION} 提供:\n` +
         `主 Agent: ${primary}\n` +
         `设计类: ${design}\n` +
         `审查类: ${review}\n` +
@@ -47,7 +64,7 @@ const lockieListAgentsTool = tool({
         `质量保障: ${quality}`
       );
     }
-    const list = categories[cat] || [];
+    const list = categories[cat as keyof typeof categories] || [];
     return `${cat} 类 agent: ${list.join(", ")}`;
   },
 });
@@ -55,29 +72,55 @@ const lockieListAgentsTool = tool({
 // ─── Plugin hooks ────────────────────────────────────────────────
 
 const lockieServer = async (input: PluginInput): Promise<Hooks> => {
-  // Load config from the priority chain
-  const { agent: agentConfig, mcp: mcpConfig } = loadPluginConfig();
+  // Load user-tunable config from the priority chain（含项目级 cwd）
+  const cwd = process.cwd();
+  const { overrides, mcp: mcpConfig } = loadPluginConfig(cwd);
 
   // Build skill index at init
   const skillsDir = join(PKG_ROOT, "skills", "opencode");
   skillTable = buildSkillTable(skillsDir);
 
-  const agentKeys = getActiveAgentKeys(agentConfig);
-  const allAgentKeys = getAgentKeys(agentConfig);
-  console.log(`[oh-y-lockie-agent v2.0.0] 已加载 ${agentKeys.length} 个活跃 agent 定义`);
+  const agentKeys = getActiveAgentKeys(overrides);
+  const allAgentKeys = getAgentKeys();
+  console.log(`[oh-y-lockie-agent v${PKG_VERSION}] 已加载 ${agentKeys.length} 个活跃 agent 定义`);
+
+  // ─── MCP 状态诊断 ──────────────────────────────────────────────
+  const mcpStatus = diagnoseMcpStatus();
+  if (mcpStatus.missing.length > 0) {
+    console.log(
+      `[oh-y-lockie-agent] ⚠ MCP 服务器未在 opencode.json 中配置: ${mcpStatus.missing.join(", ")}\n` +
+      `  运行 npx oh-y-lockie-agent setup-mcp 自动配置，或手动添加至 opencode.json 的 "mcp" 段`,
+    );
+  } else {
+    console.log(`[oh-y-lockie-agent] MCP 服务器状态: ${mcpStatus.configured.join(", ")} ✅`);
+  }
 
   return {
     config: async (cfg: Config) => {
-      // Merge plugin agent definitions with user's existing config.
-      // User's opencode.json agent entries take priority (spread second).
-      // Use type assertion: SDK's Config type has a constrained agent shape,
-      // but our plugin-registered agents conform to the runtime schema.
-      cfg.agent = {
-        ...agentConfig,
-        ...(cfg.agent || {}),
-      } as typeof cfg.agent;
+      if (!cfg.agent) cfg.agent = {};
+      const target = cfg.agent as Record<string, unknown>;
 
-      // Inject MCP servers if not already configured by user
+      // Inject our built-in agents (user override > factory default model).
+      // We never clobber agents the user already defined in opencode.json.
+      const agents = collectAgents(overrides);
+      for (const [key, val] of Object.entries(agents)) {
+        if (!(key in target)) {
+          target[key] = val;
+        }
+      }
+
+      // Apply built-in agent disable overrides (explore / general, etc.)
+      for (const [name, ov] of Object.entries(overrides)) {
+        if (ov.disable && !(name in agentSources)) {
+          target[name] = { disable: true };
+        }
+      }
+
+      // MCP 服务器注入（补充层）
+      // 主机制：静态 opencode.json 声明（由 postinstall/setup-mcp 管理）
+      // 补充层：plugin config hook 注入 cfg.mcp（兼容未来 OpenCode 版本）
+      // 注意：当前 OpenCode 的 MCP 生命周期在 config hook 之前初始化，
+      //       此补充层仅作为后续版本兼容，不保证启动 MCP 服务。
       if (!cfg.mcp) cfg.mcp = {};
       const mcpTarget = cfg.mcp as Record<string, unknown>;
       for (const [key, value] of Object.entries(mcpConfig)) {
@@ -132,15 +175,6 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
       if (!alreadyInjected) {
         sysOutput.system.push(SKILL_ROUTE_TABLE);
         console.log("[oh-y-lockie-agent] skill routing table injected into system prompt");
-      }
-    },
-
-    "shell.env": async (shellInput, shellOutput) => {
-      const cwd = shellInput.cwd || "";
-      if (cwd && existsSync(join(cwd, "CMakeLists.txt"))) {
-        if (!shellOutput.env.LOCKIE_TOOLCHAIN) {
-          shellOutput.env.LOCKIE_TOOLCHAIN = "detected";
-        }
       }
     },
 

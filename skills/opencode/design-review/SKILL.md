@@ -1,6 +1,6 @@
 ---
 name: design-review
-description: 四视角对抗式设计审查：以HW/SW/Test/System四个部门视角对SE产物进行独立审查，发现跨领域不一致、未声明假设和遗漏。Four-lens adversarial design review — runs fresh-context reviewers through HW, SW, Test, and System department lenses to catch gaps, inconsistencies, and unstated assumptions in any SE artifact (requirements, architecture, or specification). Use when the user says 设计审查, 四视角审查, 对抗式审查, design review, adversarial review, or wants a comprehensive multi-angle review before cross-department distribution. NOT a single-document checklist review (use requirements-review, code-static-review, test-plan-review, test-report-review, or release-review for targeted checklist-based reviews).
+description: 四视角对抗式设计审查：以HW/SW/Test/System四个部门视角对SE产物进行独立审查，发现跨领域不一致、未声明假设和遗漏。Four-lens adversarial design review — runs fresh-context reviewers through HW, SW, Test, and System department lenses to catch gaps, inconsistencies, and unstated assumptions in any SE artifact (requirements, architecture, or specification). Use when the user says 设计审查, 架构评审, 架构审查, 四视角审查, 四视角, 对抗式审查, design review, architecture review, adversarial review, or wants a comprehensive multi-angle review before cross-department distribution. NOT a single-document checklist review (use requirements-review, code-static-review, test-plan-review, test-report-review, or release-review for targeted checklist-based reviews).
 ---
 
 # Design Review

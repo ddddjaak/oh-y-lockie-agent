@@ -214,7 +214,7 @@ When you receive a user request, check this routing table BEFORE answering. If t
 | 需求分解、PRD分析、需求梳理 | requirements-decompose | Define |
 | 系统架构、模块划分、接口定义 | architecture-design | Design |
 | 固件架构、RTOS设计、线程模型 | software-architecture-design | Design |
-| 硬件架构、引脚分配、电源树 | hardware-architecture-design | Design |
+| 硬件架构、PCB约束、信号完整性、器件选型 | hardware-architecture-design | Design |
 | 规格编写、SOD、HW-SW接口规格 | spec-authoring | Document |
 | 软件详细设计、函数签名、状态机 | software-detailed-design | Document |
 | 硬件详细设计、原理图、PCB布局 | hardware-detailed-design | Document |
@@ -265,6 +265,10 @@ When you receive a user request, check this routing table BEFORE answering. If t
 | 板级bring-up、首次上电 | board-bringup |
 | Bootloader、安全启动、OTA | bootloader-design |
 | 依赖源码分析 | clonedeps |
+| 引脚复用分配、pinmux、复用冲突 | pinmux |
+| 寄存器映射、register map、位域生成 | register-map |
+| 内存映射、memory map、链接脚本、地址空间 | memory-map |
+| 电源架构、电源树、电压域、上电时序、电流预算 | power-tree |
 
 ### Rule
 - If the user's intent maps to exactly one skill, LOAD IT immediately.

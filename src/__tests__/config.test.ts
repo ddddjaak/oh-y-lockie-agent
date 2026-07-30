@@ -1,6 +1,27 @@
-import { describe, it, expect } from "vitest";
-import { loadPluginConfig, getActiveAgentKeys, buildAgentCategoryMap, getAgentKeys } from "../config.js";
-import type { AgentDef } from "../config.js";
+import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
+import os from "node:os";
+import { loadPluginConfig } from "../config.js";
+import {
+  getActiveAgentKeys,
+  buildAgentCategoryMap,
+  getAgentKeys,
+  collectAgents,
+} from "../agents/index.js";
+import type { AgentOverride } from "../agents/types.js";
+
+// Isolate from any real user-level config (~/.config/opencode/oh-y-lockie-agent.jsonc).
+// loadPluginConfig merges user/project overrides on top of the plugin default; these
+// unit tests assert the *plugin default*, so stub os.homedir() to a path that contains
+// no override file. This keeps the suite deterministic across machines.
+let homedirSpy: ReturnType<typeof vi.spyOn>;
+beforeAll(() => {
+  homedirSpy = vi
+    .spyOn(os, "homedir")
+    .mockReturnValue(process.platform === "win32" ? "C:\\lockie-isolated-home" : "/lockie-isolated-home");
+});
+afterAll(() => {
+  homedirSpy.mockRestore();
+});
 
 // ─── loadPluginConfig ────────────────────────────────────────────
 
@@ -8,32 +29,26 @@ describe("loadPluginConfig", () => {
   it("loads the default config from the plugin package", () => {
     const config = loadPluginConfig();
     expect(config).toBeDefined();
-    expect(config.agent).toBeDefined();
+    expect(config.overrides).toBeDefined();
     expect(config.mcp).toBeDefined();
   });
 
-  it("includes the architect agent", () => {
+  it("includes the architect agent with its default model", () => {
     const config = loadPluginConfig();
-    expect(config.agent.architect).toBeDefined();
-    expect(config.agent.architect.mode).toBe("primary");
+    expect(config.overrides.architect).toBeDefined();
+    expect(config.overrides.architect.model).toBe("ddddjaak/mimo-v2.5");
   });
 
-  it("includes the firmware agent", () => {
+  it("includes the firmware agent with its default model", () => {
     const config = loadPluginConfig();
-    expect(config.agent.firmware).toBeDefined();
-    expect(config.agent.firmware.mode).toBe("primary");
+    expect(config.overrides.firmware).toBeDefined();
+    expect(config.overrides.firmware.model).toBe("ddddjaak/mimo-v2.5");
   });
 
-  it("includes subagents", () => {
+  it("disables explore and general built-in agents", () => {
     const config = loadPluginConfig();
-    expect(config.agent["code-reviewer"]).toBeDefined();
-    expect(config.agent["power-architect"]).toBeDefined();
-  });
-
-  it("disables explore and general agents", () => {
-    const config = loadPluginConfig();
-    expect(config.agent.explore?.disable).toBe(true);
-    expect(config.agent.general?.disable).toBe(true);
+    expect(config.overrides.explore?.disable).toBe(true);
+    expect(config.overrides.general?.disable).toBe(true);
   });
 
   it("includes MCP server configs", () => {
@@ -46,28 +61,19 @@ describe("loadPluginConfig", () => {
 // ─── getActiveAgentKeys ─────────────────────────────────────────
 
 describe("getActiveAgentKeys", () => {
-  it("excludes disabled agents", () => {
-    const agents: Record<string, AgentDef> = {
-      architect: { mode: "primary" },
-      explore: { disable: true },
-      "code-reviewer": { mode: "subagent" },
-    };
-    const keys = getActiveAgentKeys(agents);
+  it("excludes agents disabled via overrides", () => {
+    const overrides: Record<string, AgentOverride> = { architect: { disable: true } };
+    const keys = getActiveAgentKeys(overrides);
+    expect(keys).not.toContain("architect");
+    expect(keys).toContain("firmware");
+  });
+
+  it("returns all registry keys when no overrides disable anything", () => {
+    const keys = getActiveAgentKeys({});
     expect(keys).toContain("architect");
+    expect(keys).toContain("firmware");
     expect(keys).toContain("code-reviewer");
-    expect(keys).not.toContain("explore");
-  });
-
-  it("returns all keys when none are disabled", () => {
-    const agents: Record<string, AgentDef> = {
-      a: { mode: "primary" },
-      b: { mode: "subagent" },
-    };
-    expect(getActiveAgentKeys(agents)).toEqual(["a", "b"]);
-  });
-
-  it("returns empty array for empty config", () => {
-    expect(getActiveAgentKeys({})).toEqual([]);
+    expect(keys.length).toBe(16);
   });
 });
 
@@ -75,33 +81,13 @@ describe("getActiveAgentKeys", () => {
 
 describe("buildAgentCategoryMap", () => {
   it("categorizes primary agents", () => {
-    const agents: Record<string, AgentDef> = {
-      architect: { mode: "primary", description: "System architect" },
-    };
-    const map = buildAgentCategoryMap(agents);
+    const map = buildAgentCategoryMap();
     expect(map.primary).toContain("architect");
+    expect(map.primary).toContain("firmware");
   });
 
   it("categorizes subagents by description keywords", () => {
-    const agents: Record<string, AgentDef> = {
-      "power-architect": {
-        mode: "subagent",
-        description: "电源架构设计师：设计电源树",
-      },
-      "code-reviewer": {
-        mode: "subagent",
-        description: "Senior code reviewer — 代码审查：正确性、可读性",
-      },
-      "fw-domain-expert": {
-        mode: "subagent",
-        description: "固件领域专家",
-      },
-      "test-engineer": {
-        mode: "subagent",
-        description: "测试工程师",
-      },
-    };
-    const map = buildAgentCategoryMap(agents);
+    const map = buildAgentCategoryMap();
     expect(map.design).toContain("power-architect");
     expect(map.review).toContain("code-reviewer");
     expect(map.domain).toContain("fw-domain-expert");
@@ -109,27 +95,44 @@ describe("buildAgentCategoryMap", () => {
   });
 
   it("excludes disabled agents", () => {
-    const agents: Record<string, AgentDef> = {
-      disabled: { disable: true },
-      enabled: { mode: "subagent", description: "电源设计" },
-    };
-    const map = buildAgentCategoryMap(agents);
-    expect(map.design).toContain("enabled");
-    expect(map.design).not.toContain("disabled");
+    const map = buildAgentCategoryMap({ "power-architect": { disable: true } });
+    expect(map.design).not.toContain("power-architect");
   });
 });
 
 // ─── getAgentKeys ────────────────────────────────────────────────
 
 describe("getAgentKeys", () => {
-  it("returns all keys including disabled", () => {
-    const agents: Record<string, AgentDef> = {
-      a: { mode: "primary" },
-      b: { disable: true },
-    };
-    const keys = getAgentKeys(agents);
-    expect(keys).toContain("a");
-    expect(keys).toContain("b");
-    expect(keys.length).toBe(2);
+  it("returns all registry keys including primary agents", () => {
+    const keys = getAgentKeys();
+    expect(keys).toContain("architect");
+    expect(keys).toContain("firmware");
+    expect(keys.length).toBe(16);
+  });
+});
+
+// ─── collectAgents ───────────────────────────────────────────────
+
+describe("collectAgents", () => {
+  it("builds all active agents with resolved models", () => {
+    const agents = collectAgents(loadPluginConfig().overrides);
+    expect(agents.architect).toBeDefined();
+    expect(agents.architect.model).toBe("ddddjaak/mimo-v2.5");
+    expect(agents.architect.mode).toBe("primary");
+  });
+
+  it("honors a user model override", () => {
+    const agents = collectAgents({ architect: { model: "custom/provider-model" } });
+    expect(agents.architect.model).toBe("custom/provider-model");
+  });
+
+  it("skips disabled agents", () => {
+    const agents = collectAgents({ architect: { disable: true } });
+    expect(agents.architect).toBeUndefined();
+  });
+
+  it("skips agents whose model is not in the available set", () => {
+    const agents = collectAgents({}, new Set(["other-model"]));
+    expect(Object.keys(agents).length).toBe(0);
   });
 });

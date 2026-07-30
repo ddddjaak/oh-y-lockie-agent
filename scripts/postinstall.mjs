@@ -1,73 +1,78 @@
 #!/usr/bin/env node
-// oh-y-lockie-agent postinstall — copy static files on npm install
-import { cpSync, mkdirSync, existsSync, copyFileSync } from "node:fs";
+// oh-y-lockie-agent postinstall — setup MCP on npm install
+//
+// 设计原则：尽量不污染 ~/.config/opencode/
+// - commands/   → 已移除（能力改由 skill + 自然语言路由提供，无需 slash 命令）
+// - agents/   → 不复制（config hook 注入 inline prompt）
+// - skills/   → 不复制（路由系统从插件目录读取）
+// - references/ → 不复制（文档，用户可从插件目录访问）
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = join(__dirname, "..");
 const OPENCODE_DIR = join(homedir(), ".config", "opencode");
-const AGENTS_DIR = join(homedir(), ".agents");
 
-console.log("[oh-y-lockie-agent] postinstall: 开始复制静态文件...");
-
-function ensureDir(dir) {
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-}
-
-function copyDir(src, dest, label) {
-  if (!existsSync(src)) { console.log(`  [跳过] ${label}: 源目录不存在`); return; }
-  ensureDir(dest);
-  try {
-    cpSync(src, dest, { recursive: true, force: true });
-    console.log(`  [OK] ${label}: ${src} → ${dest}`);
-  } catch (e) {
-    console.error(`  [失败] ${label}: ${e.message}`);
-  }
-}
+console.log("[oh-y-lockie-agent] postinstall: 开始配置...");
 
 try {
-  // Commands
-  copyDir(join(PKG_ROOT, "commands"), join(OPENCODE_DIR, "commands"), "commands");
+  // ─── MCP 服务器注入 ─────────────────────────────────────────────
+  console.log("[oh-y-lockie-agent] 检查 MCP 服务器配置...");
+  const openCodeConfigPath = join(OPENCODE_DIR, "opencode.json");
 
-  // Agents
-  copyDir(join(PKG_ROOT, "agents"), join(OPENCODE_DIR, "agents"), "agents");
+  /** 纯 MCP 命令定义（不含平台包装） */
+  const MCP_COMMANDS = {
+    codegraph: ["codegraph", "serve", "--mcp"],
+    context7: ["npx", "-y", "@upstash/context7-mcp"],
+    memory: ["npx", "-y", "@modelcontextprotocol/server-memory"],
+    "sequential-thinking": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+  };
 
-  // Skills (opencode)
-  copyDir(join(PKG_ROOT, "skills", "opencode"), join(OPENCODE_DIR, "skills"), "skills/opencode");
+  /** 跨平台适配：Windows 上需要 cmd /c 前缀 */
+  const isWin = process.platform === "win32";
+  const platformCmd = (cmd) => (isWin && cmd[0] !== "cmd" ? ["cmd", "/c", ...cmd] : cmd);
 
-  // Skills (agents)
-  copyDir(join(PKG_ROOT, "skills", "agents"), join(AGENTS_DIR, "skills"), "skills/agents");
+  /** 规范 MCP 服务器列表（带平台适配） */
+  const CANONICAL_MCP_SERVERS = Object.fromEntries(
+    Object.entries(MCP_COMMANDS).map(([name, cmd]) => [
+      name,
+      { type: "local", command: platformCmd(cmd), enabled: true },
+    ]),
+  );
 
-  // References
-  copyDir(join(PKG_ROOT, "references"), join(OPENCODE_DIR, "references"), "references");
+  if (existsSync(openCodeConfigPath)) {
+    try {
+      const raw = readFileSync(openCodeConfigPath, "utf-8");
+      let config = JSON.parse(raw);
 
-  // AGENTS.md (only if not exists)
-  const agentsMdSrc = join(PKG_ROOT, "AGENTS.md");
-  if (existsSync(agentsMdSrc)) {
-    const agentsMdDest = join(homedir(), "AGENTS.md");
-    if (!existsSync(agentsMdDest)) {
-      copyFileSync(agentsMdSrc, agentsMdDest);
-      console.log(`  [OK] AGENTS.md → ${agentsMdDest}`);
-    } else {
-      console.log(`  [跳过] AGENTS.md 已存在`);
+      // 确保 mcp 段存在
+      if (!config.mcp) config.mcp = {};
+
+      // 只添加缺失的 MCP 服务器
+      let addedCount = 0;
+      for (const [name, def] of Object.entries(CANONICAL_MCP_SERVERS)) {
+        if (!(name in config.mcp)) {
+          config.mcp[name] = def;
+          addedCount++;
+        }
+      }
+
+      if (addedCount > 0) {
+        writeFileSync(openCodeConfigPath, JSON.stringify(config, null, 2), "utf-8");
+        console.log(`  [OK] 已添加 ${addedCount} 个 MCP 服务器到 ${openCodeConfigPath}`);
+      } else {
+        console.log(`  [OK] 所有 MCP 服务器已在 ${openCodeConfigPath} 中`);
+      }
+    } catch (e) {
+      console.error(`  [失败] 更新 opencode.json MCP 段: ${e.message}`);
     }
-  }
-
-  // oh-y-lockie-agent.jsonc config reference (only if not exists)
-  const configSrc = join(PKG_ROOT, "config", "oh-y-lockie-agent.jsonc");
-  if (existsSync(configSrc)) {
-    const configDest = join(OPENCODE_DIR, "oh-y-lockie-agent.jsonc");
-    if (!existsSync(configDest)) {
-      copyFileSync(configSrc, configDest);
-      console.log(`  [OK] oh-y-lockie-agent.jsonc → ${configDest}（参考配置 — 请将 your-provider 替换为实际 provider 名称）`);
-    } else {
-      console.log(`  [跳过] oh-y-lockie-agent.jsonc 已存在`);
-    }
+  } else {
+    console.log(`  [跳过] opencode.json 不存在于 ${openCodeConfigPath}`);
   }
 
   console.log("[oh-y-lockie-agent] postinstall: 完成");
+  console.log("[oh-y-lockie-agent] 提示: agents/skills 通过插件 config hook 注入，无需复制到 ~/.config/opencode/");
 } catch (e) {
   console.error(`[oh-y-lockie-agent] postinstall 失败: ${e.message}`);
   // Don't fail npm install — plugin still works via config hook

@@ -83,5 +83,5 @@ You are an experienced Register Map Engineer who extracts, validates, and docume
 ## Composition
 
 - **Invoke directly when:** generating register maps from a chip datasheet, validating an existing register map against a datasheet revision, or producing C header files from register definitions
-- **Invoke via:** `/register-map` or as a specialist subagent during hardware-software interface specification
+- **Invoke via:** `register-map` skill（自然语言「生成寄存器映射」触发）or as a specialist subagent during hardware-software interface specification
 - **Do not invoke from another persona.** Register map extraction is tedious and error-prone when done inline — delegate it to this specialist

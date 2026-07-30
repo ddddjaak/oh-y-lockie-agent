@@ -1,18 +1,19 @@
 ---
-description: 设计电源架构：电压域、上电时序、电流预算、去耦需求、热评估
-agent: build
+name: power-tree
+description: 电源架构设计（Power Architecture）：电压域划分、上电/下电时序、各电源轨电流预算、去耦策略、热评估。Power architecture design — voltage domain breakdown, power-up/power-down sequencing, per-rail current budget, decoupling strategy, and thermal assessment. Use when the user says 电源架构, 电源树, power tree, 电压域, 上电时序, 电流预算, 去耦, 或需要为 PCB 设计电源树与功耗预算。
 ---
-# /power-tree — Power Architecture Designer
+
+# Power Architecture Designer (电源架构设计)
 
 ## Overview
 
 Produces a complete power architecture document for a PCB: voltage domain breakdown, power sequencing diagram, per-rail current budget, decoupling strategy, and thermal assessment. Delegates all analysis to the `@power-architect` agent.
 
-## Usage
+## When to Use
 
-```
-/power-tree <board-name> <--schematic path> <--pmic-datasheet path> <--mcu-datasheet path>
-```
+- A new board or board revision needs its power tree defined before schematic capture
+- Voltage domains, rail sequencing, and current budgets must be derived from component datasheets
+- Decoupling capacitor placement and thermal headroom must be specified for bring-up
 
 ## Workflow
 

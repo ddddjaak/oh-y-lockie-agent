@@ -4,18 +4,15 @@
   // =========================================================================
   // oh-y-lockie-agent 配置
   // =========================================================================
-  // 本文件定义插件的 agent 模型选择、MCP 服务器配置。
+  // 本文件只保留「用户可调项」：每个 agent 的 model 覆盖、以及 disable 开关。
+  //
+  // 【注意】agent 的定义（prompt / 描述 / mode / color）已收归代码
+  //        src/agents/definitions.ts，不在本文件维护。这里只改 model / disable。
   //
   // 【配置层级】（优先级从高到低）:
   //   1. 项目级:  .opencode/oh-y-lockie-agent.jsonc
   //   2. 用户级:  ~/.config/opencode/oh-y-lockie-agent.jsonc
   //   3. 插件默认: config/oh-y-lockie-agent.jsonc（本文件）
-  //
-  // 【使用步骤】:
-  //   1. 将本文件复制到 .opencode/ 或 ~/.config/opencode/
-  //   2. 将所有的 "your-provider" 替换为你在 opencode.json 中实际配置的 provider 名称
-  //      （例如 "openai"、"azure" 等）
-  //   3. 确认模型名称与你的 API 端点支持的模型一致
   // =========================================================================
 
   "agent": {
@@ -23,127 +20,75 @@
     // ── 主 Agent ──────────────────────────────────────────────────
 
     "architect": {
-      "color": "#4CAF50",
-      "description": "SE 系统架构师 — 芯片系统级设计：需求分解、架构设计、规格撰写、跨部门审查",
-      "mode": "primary",
-      "model": "your-provider/qwen3.7-plus",   // ← 替换为实际 provider
-      "prompt_file": "file://agents/architect.md",
-      "temperature": 0.2
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     "firmware": {
-      "color": "#2196F3",
-      "description": "AE 应用工程师 — 嵌入式固件开发：驱动设计、RTOS、调试、性能优化",
-      "mode": "primary",
-      "model": "your-provider/qwen3.7-plus",   // ← 替换为实际 provider
-      "prompt_file": "file://agents/firmware.md",
-      "temperature": 0.2
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     // ── Subagent: 设计类 ─────────────────────────────────────────
 
     "power-architect": {
-      "description": "电源架构设计师：设计电源树、电压域、上电时序、电流预算、去耦策略",
-      "mode": "subagent",
-      "model": "your-provider/deepseek-v4-pro",
-      "prompt_file": "file://agents/power-architect.md"
+      "model": "ddddjaak/mimo-v2.5-pro"
     },
 
     "boot-bringup-specialist": {
-      "description": "启动与bring-up专家：设计启动序列、验证Boot ROM行为、创建首次上电检查清单",
-      "mode": "subagent",
-      "model": "your-provider/deepseek-v4-pro",
-      "prompt_file": "file://agents/boot-bringup-specialist.md"
+      "model": "ddddjaak/mimo-v2.5-pro"
     },
 
     "memory-map-specialist": {
-      "description": "内存映射专家：设计Flash分区、SRAM分配、外设地址映射、MPU配置、链接脚本",
-      "mode": "subagent",
-      "model": "your-provider/deepseek-v4-pro",
-      "prompt_file": "file://agents/memory-map-specialist.md"
+      "model": "ddddjaak/mimo-v2.5-pro"
     },
 
     "firmware-architect": {
-      "description": "固件架构师：设计固件架构——任务分解、IPC拓扑、HAL分层、引导架构、状态机设计",
-      "mode": "subagent",
-      "model": "your-provider/qwen3.7-plus",
-      "prompt_file": "file://agents/firmware-architect.md"
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     "timing-analyst": {
-      "description": "时序分析师：设计时钟树、配置PLL、验证建立/保持时序、计算波特率容差",
-      "mode": "subagent",
-      "model": "your-provider/deepseek-v4-pro",
-      "prompt_file": "file://agents/timing-analyst.md"
+      "model": "ddddjaak/mimo-v2.5-pro"
     },
 
     "register-map-generator": {
-      "description": "寄存器映射生成器：从数据手册提取寄存器定义、验证地址对齐、检查保留位",
-      "mode": "subagent",
-      "model": "your-provider/qwen3.6-plus",
-      "prompt_file": "file://agents/register-map-generator.md"
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     // ── Subagent: 审查类 ─────────────────────────────────────────
 
     "code-reviewer": {
-      "description": "Senior code reviewer — 五维度代码审查：正确性、可读性、架构、安全、性能",
-      "mode": "subagent",
-      "model": "your-provider/deepseek-v4-pro",
-      "prompt_file": "file://agents/code-reviewer.md"
+      "model": "ddddjaak/mimo-v2.5-pro"
     },
 
     "security-auditor": {
-      "description": "安全审计师 — 固件安全审计：安全启动、加密、密钥管理、通信安全、物理安全",
-      "mode": "subagent",
-      "model": "your-provider/deepseek-v4-pro",
-      "prompt_file": "file://agents/security-auditor.md"
+      "model": "ddddjaak/mimo-v2.5-pro"
     },
 
     "system-architect": {
-      "description": "系统架构审查师 — 从系统级视角审查架构决策：模块边界、接口契约、约束分析",
-      "mode": "subagent",
-      "model": "your-provider/deepseek-v4-pro",
-      "prompt_file": "file://agents/system-architect.md"
+      "model": "ddddjaak/mimo-v2.5-pro"
     },
 
     // ── Subagent: 领域专家 ───────────────────────────────────────
 
     "fw-domain-expert": {
-      "description": "固件领域专家 — 审查固件架构决策、RTOS配置、驱动设计、内存规划",
-      "mode": "subagent",
-      "model": "your-provider/qwen3.7-plus",
-      "prompt_file": "file://agents/fw-domain-expert.md"
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     "hw-domain-expert": {
-      "description": "硬件领域专家 — 审查硬件设计决策：引脚分配、电源树、时钟树、PCB布局约束",
-      "mode": "subagent",
-      "model": "your-provider/qwen3.7-plus",
-      "prompt_file": "file://agents/hw-domain-expert.md"
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     "compliance-reviewer": {
-      "description": "合规审查员 — 审查设计合规性：行业标准、法规要求、安全规范",
-      "mode": "subagent",
-      "model": "your-provider/qwen3.6-flash",
-      "prompt_file": "file://agents/compliance-reviewer.md"
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     // ── Subagent: 质量保障 ───────────────────────────────────────
 
     "test-engineer": {
-      "description": "测试工程师 — 审查设计方案的可测试性、测试覆盖率和测试策略",
-      "mode": "subagent",
-      "model": "your-provider/qwen3.6-flash",
-      "prompt_file": "file://agents/test-engineer.md"
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     "verification-engineer": {
-      "description": "验证工程师 — 验证设计方案完整性和一致性，追溯矩阵审查",
-      "mode": "subagent",
-      "model": "your-provider/qwen3.6-flash",
-      "prompt_file": "file://agents/verification-engineer.md"
+      "model": "ddddjaak/mimo-v2.5"
     },
 
     // ── 禁用默认 agent ───────────────────────────────────────────
@@ -167,17 +112,17 @@
       "type": "local"
     },
     "context7": {
-      "command": ["cmd", "/c", "npx", "-y", "@upstash/context7-mcp"],
+      "command": ["npx", "-y", "@upstash/context7-mcp"],
       "enabled": true,
       "type": "local"
     },
     "memory": {
-      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-memory"],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
       "enabled": true,
       "type": "local"
     },
     "sequential-thinking": {
-      "command": ["cmd", "/c", "npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
       "enabled": true,
       "type": "local"
     }

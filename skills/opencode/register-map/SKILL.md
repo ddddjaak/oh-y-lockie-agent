@@ -1,18 +1,19 @@
 ---
-description: 寄存器映射生成：从数据手册提取寄存器定义、验证地址对齐、检查保留位、生成结构化文档
-agent: build
+name: register-map
+description: 寄存器映射生成（Register Map）：从芯片数据手册/参考手册提取寄存器与位域定义、校验地址对齐、检查保留位、生成 C 头文件/Markdown/JSON 结构化文档。Register map generation — extract register definitions from a datasheet or reference manual, verify address alignment, audit reserved bit fields, and generate structured register documentation (C header, Markdown, JSON). Use when the user says 寄存器映射, register map, 位域, 寄存器表, 生成寄存器头文件, 或需要从数据手册生成寄存器定义。
 ---
-# /register-map — Register Map Generator
+
+# Register Map Generator (寄存器映射生成)
 
 ## Overview
 
 Extracts register definitions from a chip datasheet or reference manual, verifies address alignment, checks reserved bit fields, and generates structured register documentation suitable for header files and firmware reference. Delegates extraction and verification to the `@register-map-generator` agent.
 
-## Usage
+## When to Use
 
-```
-/register-map <peripheral-name> <--datasheet path> [--format c-header|markdown|json] [--base-offset <hex>]
-```
+- A peripheral's register set must be turned into a C header, Markdown reference, or JSON machine-readable definition
+- An existing register map must be validated against a datasheet revision
+- Generated headers must enforce read-only / write-only / W1C semantics from the datasheet
 
 ## Workflow
 
@@ -71,8 +72,8 @@ docs/registers/<peripheral>_reg.h
 
 | Bits | Field | Access | Reset | Description |
 |------|-------|--------|-------|-------------|
-| 0    | EN    | RW     | 0     | Peripheral enable: 0=disabled, 1=enabled |
-| 1    | IE    | RW     | 0     | Interrupt enable |
+| 0    | EN    | RW    | 0     | Peripheral enable: 0=disabled, 1=enabled |
+| 1    | IE    | RW    | 0     | Interrupt enable |
 | 7:2  | —     | —      | 0x00  | Reserved, must be kept at reset value |
 | ...  | ...   | ...    | ...   | ...         |
 ```

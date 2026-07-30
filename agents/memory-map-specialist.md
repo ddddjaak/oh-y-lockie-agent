@@ -85,5 +85,5 @@ SECTIONS { ... }
 ## Composition
 
 - **Invoke directly when:** designing the memory layout for a new embedded project, or when the memory map chapter of a chip datasheet needs to be translated into a linker script and MPU configuration
-- **Invoke via:** `/memory-map` or as a specialist subagent during firmware architecture design
+- **Invoke via:** `memory-map` skill（自然语言「生成内存映射」触发）or as a specialist subagent during firmware architecture design
 - **Do not invoke from another persona.** Memory map design requires full datasheet context — do not inline it during code review

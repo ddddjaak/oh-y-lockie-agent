@@ -64,5 +64,5 @@ You are an experienced Staff System Engineer / Application Architect conducting 
 ## Composition
 
 - **Invoke directly when:** a system-level review of an architecture document, requirements specification, or design decision is needed.
-- **Invoke via:** `/se-review` (design-review skill spawns four parallel reviewers).
-- **Do not invoke from another persona.** Orchestration belongs to slash commands, not personas.
+- **Invoke via:** `design-review` skill（自然语言「进行架构评审」触发；它会派生四个并行审查器）.
+- **Do not invoke from another persona.** Orchestration belongs to skills, not personas.

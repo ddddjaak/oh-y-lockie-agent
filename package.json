@@ -1,7 +1,7 @@
 {
   "name": "oh-y-lockie-agent",
-  "version": "2.0.0",
-  "description": "芯片系统架构师 + 嵌入式工程师双管线智能编排插件 — OpenCode即插即用。含2主Agent+14Subagent+21Command+60Skill。",
+  "version": "1.0.0",
+  "description": "芯片系统架构师 + 嵌入式工程师双管线智能编排插件 — OpenCode即插即用。含2主Agent+14Subagent+62Skill(55 opencode + 7 agents)。自然语言触发，无需 slash 命令。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,18 +14,20 @@
   "files": [
     "dist",
     "agents",
-    "commands",
     "skills",
     "references",
     "config/oh-y-lockie-agent.jsonc",
+    ".mcp.json",
     "AGENTS.md",
     "scripts/postinstall.mjs",
-    "scripts/preuninstall.mjs"
+    "scripts/preuninstall.mjs",
+    "scripts/setup-mcp.mjs"
   ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "setup-mcp": "node scripts/setup-mcp.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "preuninstall": "node scripts/preuninstall.mjs",
     "prepublishOnly": "npm run build"
@@ -42,7 +44,7 @@
   "license": "MIT",
   "dependencies": {
     "@opencode-ai/plugin": "^1.17.0",
-    "@opencode-ai/sdk": "^1.17.0",
+    "@opencode-ai/sdk": "^1.18.9",
     "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
