@@ -17,16 +17,19 @@
     "skills",
     "references",
     "config/oh-y-lockie-agent.jsonc",
+    "config/mcp-servers.json",
     ".mcp.json",
     "AGENTS.md",
     "scripts/postinstall.mjs",
     "scripts/preuninstall.mjs",
-    "scripts/setup-mcp.mjs"
+    "scripts/setup-mcp.mjs",
+    "scripts/analyze-telemetry.mjs"
   ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "telemetry": "node scripts/analyze-telemetry.mjs",
     "setup-mcp": "node scripts/setup-mcp.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "preuninstall": "node scripts/preuninstall.mjs",
@@ -45,7 +48,8 @@
   "dependencies": {
     "@opencode-ai/plugin": "^1.17.0",
     "@opencode-ai/sdk": "^1.18.9",
-    "jsonc-parser": "^3.3.1"
+    "jsonc-parser": "^3.3.1",
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@types/node": "^22",

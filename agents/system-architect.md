@@ -1,4 +1,5 @@
 ---
+name: system-architect
 description: Senior System Architect that reviews SE artifacts for architecture consistency, constraint satisfaction, and cross-domain integration. Use for reviewing architecture designs, requirements documents, specifications, and design decisions from a whole-system perspective.
 
 mode: subagent

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
 import os from "node:os";
 import { loadPluginConfig } from "../config.js";
+import { validatePluginConfig } from "../config-schema.js";
 import {
   getActiveAgentKeys,
   buildAgentCategoryMap,
@@ -134,5 +135,77 @@ describe("collectAgents", () => {
   it("skips agents whose model is not in the available set", () => {
     const agents = collectAgents({}, new Set(["other-model"]));
     expect(Object.keys(agents).length).toBe(0);
+  });
+});
+
+// ─── validatePluginConfig — schema enforcement ─────────────────
+
+describe("validatePluginConfig — schema enforcement", () => {
+  it("rejects unknown top-level field (strict)", () => {
+    const r = validatePluginConfig({ agent: {}, bogusField: true }, "test.jsonc");
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("bogusField");
+  });
+
+  it("rejects typo in agent override field (e.g. modle → model)", () => {
+    const r = validatePluginConfig({ agent: { architect: { modle: "x" } } }, "test.jsonc");
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("modle");
+  });
+
+  it("rejects wrong type for model (must be string)", () => {
+    const r = validatePluginConfig({ agent: { architect: { model: 123 } } }, "test.jsonc");
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects wrong type for disable (must be boolean)", () => {
+    const r = validatePluginConfig({ agent: { architect: { disable: "yes" } } }, "test.jsonc");
+    expect(r.success).toBe(false);
+  });
+
+  it("accepts valid config with embedded target context", () => {
+    const r = validatePluginConfig(
+      {
+        agent: { architect: { model: "m1" } },
+        target: { chip: "CS32F103C8T6", family: "Cortex-M3", sdk: "Chipsea SDK", toolchain: "GCC ARM" },
+      },
+      "test.jsonc",
+    );
+    expect(r.success).toBe(true);
+    expect(r.data?.target?.chip).toBe("CS32F103C8T6");
+    expect(r.data?.target?.family).toBe("Cortex-M3");
+  });
+
+  it("warns on unknown agent key (soft, non-blocking)", () => {
+    // "code-reviwer" is a typo of "code-reviewer" — should warn, not fail
+    const r = validatePluginConfig({ agent: { "code-reviwer": { model: "x" } } }, "test.jsonc");
+    expect(r.success).toBe(true);
+    expect(r.warnings.length).toBeGreaterThan(0);
+    expect(r.warnings[0]).toContain("code-reviwer");
+  });
+
+  it("does not warn on known agent keys", () => {
+    const r = validatePluginConfig({ agent: { architect: { model: "x" }, explore: { disable: true } } }, "test.jsonc");
+    expect(r.success).toBe(true);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("accepts $schema hint field (JSON Schema standard)", () => {
+    const r = validatePluginConfig(
+      { $schema: "https://opencode.ai/config.json", agent: {} },
+      "test.jsonc",
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects unknown field in target (strict)", () => {
+    const r = validatePluginConfig({ target: { chip: "X", bogus: true } }, "test.jsonc");
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("bogus");
+  });
+
+  it("accepts empty config (all fields optional)", () => {
+    const r = validatePluginConfig({}, "test.jsonc");
+    expect(r.success).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 ---
+name: boot-bringup-specialist
 description: 启动与bring-up专家：设计启动序列、验证Boot ROM行为、创建首次上电检查清单、验证时钟和内存初始化。
 
 mode: subagent

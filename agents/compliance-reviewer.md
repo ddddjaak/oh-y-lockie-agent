@@ -1,4 +1,5 @@
 ---
+name: compliance-reviewer
 description: Compliance and safety reviewer that audits SE artifacts against regulatory standards, safety requirements, and security controls. Use for reviewing requirements, architecture, and specifications for compliance with FCC, CE, UL, ISO 26262, IEC 61508, and security best practices.
 
 mode: subagent

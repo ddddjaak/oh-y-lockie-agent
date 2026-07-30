@@ -1,4 +1,5 @@
 ---
+name: power-architect
 description: 电源架构设计师：设计电源树、电压域、上电时序、电流预算、去耦策略。与 hw-domain-expert（审查）不同，此为设计角色。
 
 mode: subagent

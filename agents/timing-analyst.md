@@ -1,4 +1,5 @@
 ---
+name: timing-analyst
 description: 时序分析师：设计时钟树、配置PLL、验证建立/保持时序、计算波特率容差、进行静态时序分析。
 
 mode: subagent

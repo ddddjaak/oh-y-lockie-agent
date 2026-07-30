@@ -11,7 +11,7 @@
  * 最可靠的 MCP 配置方式是将 MCP 写入 opencode.json 的静态声明。
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, copyFileSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -30,29 +30,44 @@ export interface McpServerDef {
   enabled?: boolean;
 }
 
-/** 插件依赖的规范 MCP 服务器列表（纯命令，不含平台包装） */
-export const CANONICAL_MCP_SERVERS: Record<string, McpServerDef> = {
-  codegraph: {
-    type: "local",
-    command: ["codegraph", "serve", "--mcp"],
-    enabled: true,
-  },
-  context7: {
-    type: "local",
-    command: ["npx", "-y", "@upstash/context7-mcp"],
-    enabled: true,
-  },
-  memory: {
-    type: "local",
-    command: ["npx", "-y", "@modelcontextprotocol/server-memory"],
-    enabled: true,
-  },
-  "sequential-thinking": {
-    type: "local",
-    command: ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
-    enabled: true,
-  },
-};
+/**
+ * Load the canonical MCP server commands from `config/mcp-servers.json`.
+ *
+ * This JSON file is the SINGLE SOURCE OF TRUTH for the bare MCP commands —
+ * both this module (TS, runtime) and `scripts/postinstall.mjs` (mjs, install
+ * time) read it. Previously each maintained its own hardcoded copy, which
+ * silently drifted when only one side was updated.
+ *
+ * @returns Map of server name -> bare command tokens (no platform wrapping).
+ */
+function loadMcpCommands(): Record<string, string[]> {
+  const jsonPath = join(PKG_ROOT, "config", "mcp-servers.json");
+  try {
+    const raw = readFileSync(jsonPath, "utf-8");
+    return JSON.parse(raw) as Record<string, string[]>;
+  } catch (err) {
+    // Non-fatal: callers tolerate an empty map, but we log so a missing or
+    // corrupt JSON doesn't make every MCP server silently disappear.
+    console.error(`[oh-y-lockie-agent] failed to load ${jsonPath}:`, err);
+    return {};
+  }
+}
+
+const MCP_COMMANDS = loadMcpCommands();
+
+/**
+ * Canonical MCP server definitions (pure commands, no platform wrapping).
+ *
+ * Built from `config/mcp-servers.json` so the command tokens live in exactly
+ * one place. Platform adaptation (cmd /c on Windows) is applied later by
+ * {@link getPlatformCommand} / {@link getCanonicalMcpServers}.
+ */
+export const CANONICAL_MCP_SERVERS: Record<string, McpServerDef> = Object.fromEntries(
+  Object.entries(MCP_COMMANDS).map(([name, command]) => [
+    name,
+    { type: "local", command, enabled: true },
+  ]),
+);
 
 /** MCP 服务器在 Windows 上的命令（用 cmd /c 包装） */
 const WIN_CMD_PREFIX = ["cmd", "/c"];
@@ -145,6 +160,25 @@ export function getMissingMcpServers(
  *
  * @returns 写入的 MCP 服务器数量
  */
+/**
+ * 原子写 JSON:写 tmp → 备份 .bak → rename(原子)。
+ *
+ * 直接 writeFileSync 覆盖用户 opencode.json 在写一半被中断时会损坏配置。
+ * 此流程保证:① 目标文件要么是完整的旧内容(.bak 还在、目标未替换),
+ * ② 要么是完整的新内容(rename 原子完成)。.tmp 残留可清理,.bak 供手动回滚。
+ *
+ * 与 scripts/postinstall.mjs 的 atomicWriteJson 保持逻辑一致(跨 TS/mjs 共享语义)。
+ */
+export function atomicWriteJson(filePath: string, data: unknown): void {
+  const tmp = filePath + ".tmp";
+  const bak = filePath + ".bak";
+  if (existsSync(filePath)) {
+    copyFileSync(filePath, bak);
+  }
+  writeFileSync(tmp, JSON.stringify(data, null, 2), "utf-8");
+  renameSync(tmp, filePath);  // Node rename 在两平台都原子替换已存在目标
+}
+
 export function injectMcpToOpenCodeConfig(): number {
   const configPath = getOpenCodeConfigPath();
   const userConfig = readOpenCodeConfig();
@@ -177,12 +211,13 @@ export function injectMcpToOpenCodeConfig(): number {
   };
 
   try {
-    writeFileSync(configPath, JSON.stringify(updatedConfig, null, 2), "utf-8");
+    atomicWriteJson(configPath, updatedConfig);
     const names = Object.keys(missing).join(", ");
-    console.log(`[oh-y-lockie-agent] 已添加 MCP 服务器到 opencode.json: ${names}`);
+    console.log(`[oh-y-lockie-agent] 已添加 MCP 服务器到 opencode.json: ${names}(原子写,备份 .bak)`);
     return Object.keys(missing).length;
   } catch (err) {
     console.error(`[oh-y-lockie-agent] 写入 opencode.json 失败:`, err);
+    // 清理残留的 .tmp(若 rename 前失败)
     return 0;
   }
 }

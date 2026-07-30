@@ -1,4 +1,5 @@
 ---
+name: firmware-architect
 description: 固件架构师：设计固件架构——任务分解、IPC拓扑、HAL分层、引导架构、OTA策略、状态机设计。与 fw-domain-expert（审查）不同，此为设计角色。
 
 mode: subagent

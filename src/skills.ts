@@ -10,6 +10,8 @@
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { buildRouteTableFromMap, skillsForIntent, getSkillTriggers } from "./intent.js";
+import type { Intent } from "./intent.js";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -142,13 +144,19 @@ export function buildSkillTable(skillsDir: string): SkillEntry[] {
       try {
         const content = readFileSync(skillPath, "utf-8");
         const fm = parseFrontmatter(content);
-        if (!fm) return null;
+        if (!fm) {
+          console.warn(`[oh-y-lockie-agent] skill ${d.name}: frontmatter missing or incomplete, skipped`);
+          return null;
+        }
         return {
           name: fm.name,
           description: fm.description,
           keywords: extractKeywords(fm.description),
         };
-      } catch {
+      } catch (err) {
+        // A single broken skill must not abort the whole index build, but we
+        // log which skill failed so it doesn't silently vanish from routing.
+        console.error(`[oh-y-lockie-agent] skill ${d.name}: failed to load SKILL.md:`, err);
         return null;
       }
     })
@@ -165,21 +173,50 @@ export function buildSkillTable(skillsDir: string): SkillEntry[] {
  *
  * @param userText    The user's input text.
  * @param skillTable  The skill index to match against.
+ * @param intent      Optional intent to restrict matching to that intent's skill
+ *                    subset. When provided, only skills in INTENT_SKILL_MAP[intent]
+ *                    are scored — this prevents cross-category mismatches like
+ *                    "PLL 对不对" (review intent) routing to clock-configuration
+ *                    (a design skill). When omitted, all skills are scored
+ *                    (backward-compatible with existing callers).
  * @returns The best-matching SkillEntry, or null if below threshold.
  */
-export function matchSkill(userText: string, skillTable: SkillEntry[]): SkillEntry | null {
+export interface SkillMatch {
+  entry: SkillEntry;
+  score: number;
+}
+
+/**
+ * Match AND return the score. Telemetry uses the score to distinguish "matched
+ * weakly" from "matched strongly" — a pattern of low-score matches on an intent
+ * signals the SKILL_TRIGGERS for that intent need stronger words.
+ */
+export function matchSkillDetail(userText: string, skillTable: SkillEntry[], intent?: Intent): SkillMatch | null {
   if (!userText || skillTable.length === 0) return null;
   const lower = userText.trim().toLowerCase();
+
+  // Restrict to the intent's skill subset when an intent is provided.
+  const candidates = intent
+    ? skillTable.filter((s) => skillsForIntent(intent).includes(s.name))
+    : skillTable;
 
   let bestMatch: SkillEntry | null = null;
   let bestScore = 0;
 
-  for (const skill of skillTable) {
+  for (const skill of candidates) {
     let score = 0;
-    for (const kw of skill.keywords) {
+    // Merge extractKeywords output (English, from description) with SKILL_TRIGGERS
+    // (Chinese+English, manually curated in intent.ts). This fixes the eval-exposed
+    // flaw where "时钟树" couldn't match "clock" — Chinese triggers now match.
+    const triggers = [...skill.keywords, ...getSkillTriggers(skill.name)];
+    for (const kw of triggers) {
       if (lower.includes(kw)) {
-        // Longer keyword = stronger signal
-        score += kw.length >= 4 ? 3 : 1;
+        // Chinese chars are info-dense (2 CN chars ≈ 4 EN letters), and 3-letter
+        // English abbrevs (tdd/pll/mpu) are strong signals. Score them as strong
+        // to avoid the eval-exposed flaw where "调试" (2 CN chars) scored only 1
+        // and fell below the threshold. Short EN noise ("ci") still scores 1.
+        const isStrong = kw.length >= 3 || /[\u4e00-\u9fa5]/.test(kw);
+        score += isStrong ? 3 : 1;
       }
     }
     if (score > bestScore) {
@@ -191,87 +228,27 @@ export function matchSkill(userText: string, skillTable: SkillEntry[]): SkillEnt
   // Require at least 2 points to avoid noise matches
   if (bestScore >= 2 && bestMatch) {
     console.log(`[oh-y-lockie-agent] skill match: "${bestMatch.name}" (score=${bestScore})`);
-    return bestMatch;
+    return { entry: bestMatch, score: bestScore };
   }
 
   return null;
+}
+
+/** Backward-compatible wrapper: returns just the SkillEntry. */
+export function matchSkill(userText: string, skillTable: SkillEntry[], intent?: Intent): SkillEntry | null {
+  return matchSkillDetail(userText, skillTable, intent)?.entry ?? null;
 }
 
 // ─── Routing table (system prompt injection) ─────────────────────
 
 export const ROUTE_MARKER = "[oh-y-lockie-agent skill routing table]";
 
-export const SKILL_ROUTE_TABLE = `
-${ROUTE_MARKER}
-
-## Skill Routing Table
-
-When you receive a user request, check this routing table BEFORE answering. If the task matches a row, use the \`skill\` tool to load the corresponding skill.
-
-### SE Pipeline (芯片系统设计)
-| 用户意图 | 加载 Skill | 阶段 |
-|---------|-----------|------|
-| 需求分解、PRD分析、需求梳理 | requirements-decompose | Define |
-| 系统架构、模块划分、接口定义 | architecture-design | Design |
-| 固件架构、RTOS设计、线程模型 | software-architecture-design | Design |
-| 硬件架构、PCB约束、信号完整性、器件选型 | hardware-architecture-design | Design |
-| 规格编写、SOD、HW-SW接口规格 | spec-authoring | Document |
-| 软件详细设计、函数签名、状态机 | software-detailed-design | Document |
-| 硬件详细设计、原理图、PCB布局 | hardware-detailed-design | Document |
-| 算法设计、信号处理、滤波器 | algorithm-design | Document |
-| 四视角设计审查、跨部门评审 | design-review | Verify |
-| 需求文档审查 | requirements-review | Verify |
-| 代码静态审查、编码规范检查 | code-static-review | Verify |
-| 测试方案审查 | test-plan-review | Verify |
-| 测试报告审查 | test-report-review | Verify |
-| 发布审查、发布就绪 | release-review | Verify |
-| 追溯矩阵、覆盖缺口分析 | traceability-matrix | Validate |
-
-### AE Pipeline (嵌入式固件开发)
-| 用户意图 | 加载 Skill | 阶段 |
-|---------|-----------|------|
-| 需求不明确、澄清意图 | interview-me | Define |
-| 想法精炼、头脑风暴 | idea-refine | Define |
-| 写规格、定义需求 | spec-driven-development | Define |
-| 任务拆解、计划 | planning-and-task-breakdown | Plan |
-| 增量实现、分步开发 | incremental-implementation | Build |
-| 源码驱动开发、查阅文档 | source-driven-development | Build |
-| 怀疑驱动、对抗式审查 | doubt-driven-development | Build |
-| 上下文优化 | context-engineering | Build |
-| API/接口设计、HAL层 | api-and-interface-design | Build |
-| TDD测试驱动开发 | test-driven-development | Verify |
-| 通用调试 | debugging-and-error-recovery | Verify |
-| 嵌入式调试、HardFault分析 | embedded-debugging | Embedded |
-| RTOS/并发设计 | rtos-and-concurrency | Embedded |
-| 外设驱动设计 | peripheral-driver-design | Embedded |
-| 构建/工具链配置 | embedded-build-and-toolchain | Embedded |
-| 代码评审 | code-review-and-quality | Review |
-| 代码简化 | code-simplification | Review |
-| 安全加固 | security-and-hardening | Review |
-| 性能优化 | performance-optimization | Review |
-| Git工作流 | git-workflow-and-versioning | Ship |
-| CI/CD自动化 | ci-cd-and-automation | Ship |
-| 弃用/迁移 | deprecation-and-migration | Ship |
-| 文档/ADR | documentation-and-adrs | Ship |
-| 发布/部署 | shipping-and-launch | Ship |
-
-### Domain-Specific Skills
-| 用户意图 | 加载 Skill |
-|---------|-----------|
-| 电源管理、低功耗、DVFS、PMIC | power-management |
-| 时钟配置、PLL、时钟树 | clock-configuration |
-| 内存保护、MPU、TrustZone | memory-protection |
-| 设备树、DTS、pinctrl | device-tree |
-| 板级bring-up、首次上电 | board-bringup |
-| Bootloader、安全启动、OTA | bootloader-design |
-| 依赖源码分析 | clonedeps |
-| 引脚复用分配、pinmux、复用冲突 | pinmux |
-| 寄存器映射、register map、位域生成 | register-map |
-| 内存映射、memory map、链接脚本、地址空间 | memory-map |
-| 电源架构、电源树、电压域、上电时序、电流预算 | power-tree |
-
-### Rule
-- If the user's intent maps to exactly one skill, LOAD IT immediately.
-- If ambiguous (maps to 2+), pick the most specific one or ask the user.
-- If no match, proceed without loading a skill.
-`.trim();
+/**
+ * Skill routing table injected into the system prompt.
+ *
+ * Self-generated from INTENT_SKILL_MAP (see intent.ts) so new skills appear
+ * automatically — no hand-maintained table to keep in sync. Previously this
+ * was a 70-line hand-written string that had drifted: 5 skills (deepwork,
+ * reflect, simplify, verification-planning, worktrees) were missing entirely.
+ */
+export const SKILL_ROUTE_TABLE = buildRouteTableFromMap();

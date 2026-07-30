@@ -1,4 +1,5 @@
 ---
+name: fw-domain-expert
 description: Firmware domain expert that reviews SE artifacts from the firmware perspective — driver interfaces, RTOS integration, memory maps, boot flow, interrupt handling, and concurrency models. Use for reviewing requirements, architecture, and specifications for firmware correctness and implementability.
 
 mode: subagent

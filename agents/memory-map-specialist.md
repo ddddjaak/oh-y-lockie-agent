@@ -1,4 +1,5 @@
 ---
+name: memory-map-specialist
 description: 内存映射专家：设计Flash分区、SRAM分配、外设地址映射、MPU配置、链接脚本。
 
 mode: subagent

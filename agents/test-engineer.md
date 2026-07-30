@@ -93,5 +93,5 @@ When analyzing test coverage:
 ## Composition
 
 - **Invoke directly when:** the user asks for test design, coverage analysis, or a Prove-It test for a specific bug.
-- **Invoke via:** `/test` (TDD workflow) or `/ship` (parallel fan-out for coverage gap analysis alongside `code-reviewer` and `security-auditor`).
-- **Do not invoke from another persona.** Recommendations to add tests belong in your report; the user or a slash command decides when to act on them. See [agents/README.md](README.md).
+- **Invoke via:** `test-driven-development` skill（自然语言「测试驱动」触发）. For pre-ship multi-perspective review alongside `code-reviewer` and `security-auditor`, use the `ship-review` skill（自然语言「发布前审查」触发）.
+- **Do not invoke from another persona.** Recommendations to add tests belong in your report; the user or a skill decides when to act on them. See [agents/README.md](README.md).

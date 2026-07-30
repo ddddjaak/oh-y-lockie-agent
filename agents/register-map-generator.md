@@ -1,4 +1,5 @@
 ---
+name: register-map-generator
 description: 寄存器映射生成器：从数据手册提取寄存器定义、验证地址对齐、检查保留位、生成结构化寄存器映射文档。
 
 mode: subagent

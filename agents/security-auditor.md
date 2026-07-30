@@ -99,5 +99,5 @@ You are an experienced Security Engineer conducting a security review. Your role
 ## Composition
 
 - **Invoke directly when:** the user wants a security-focused pass on a specific change, file, or system component.
-- **Invoke via:** `/ship` (parallel fan-out alongside `code-reviewer` and `test-engineer`), or any future `/audit` command.
-- **Do not invoke from another persona.** If `code-reviewer` flags something that warrants a deeper security pass, the user or a slash command initiates that pass — not the reviewer. See [agents/README.md](README.md).
+- **Invoke via:** `security-and-hardening` skill（自然语言「安全审计/加固」触发）. For pre-ship multi-perspective review alongside `code-reviewer` and `test-engineer`, use the `ship-review` skill（自然语言「发布前审查」触发）.
+- **Do not invoke from another persona.** If `code-reviewer` flags something that warrants a deeper security pass, the user or a skill initiates that pass — not the reviewer. See [agents/README.md](README.md).

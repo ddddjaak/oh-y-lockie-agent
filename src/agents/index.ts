@@ -1,23 +1,26 @@
 /**
  * Agent registry + build/collect pipeline for oh-y-lockie-agent.
  *
- * This is the single registration point for all built-in agents, mirroring
- * omo-opencode's `agentSources` + `collectPendingBuiltinAgents` design:
+ * Single registration point for all built-in agents:
  *
- *   - `agentSources`  : name -> AgentFactory registry
- *   - `buildAgent`    : factory(model) -> AgentConfig (carries static `mode`)
- *   - `collectAgents` : applies user overrides + optional availability gating,
- *                       returns the map to inject into OpenCode's cfg.agent
+ *   - `agentSources`        : name -> AgentDef registry
+ *   - `buildAgent`          : def(model) -> AgentConfig (carries `mode` from def)
+ *   - `collectAgents`       : applies user overrides + optional availability gating,
+ *                             returns the map to inject into OpenCode's cfg.agent
+ *   - `buildAgentCategoryMap`: groups agents by `def.category` for the listing tool
+ *
+ * No `as` assertions, no `description.includes(...)` reverse-inference —
+ * categorization is driven by the explicit `category` field on each AgentDef.
  */
 
 import type { AgentConfig } from "@opencode-ai/sdk";
-import type { AgentFactory, AgentOverride } from "./types.js";
+import type { AgentDef, AgentOverride } from "./types.js";
 import * as defs from "./definitions.js";
 
 export * from "./types.js";
 
-/** Registry of all built-in agents (name -> factory). */
-export const agentSources: Record<string, AgentFactory> = {
+/** Registry of all built-in agents (name -> definition). */
+export const agentSources: Record<string, AgentDef> = {
   architect: defs.architect,
   firmware: defs.firmware,
   "power-architect": defs.powerArchitect,
@@ -36,15 +39,14 @@ export const agentSources: Record<string, AgentFactory> = {
   "verification-engineer": defs.verificationEngineer,
 };
 
-/** Build a single agent's AgentConfig from its factory. */
-export function buildAgent(factory: AgentFactory, model: string): AgentConfig {
-  const base = factory(model) as AgentConfig & { mode?: AgentFactory["mode"] };
-  // Carry the static mode onto the produced config (omo-opencode does the same
-  // in agent-builder.ts).
-  if (base.mode === undefined) {
-    base.mode = factory.mode;
-  }
-  return base;
+/**
+ * Build a single agent's AgentConfig from its definition.
+ *
+ * `mode` is carried from `def.mode` onto the produced config — no assertion
+ * needed because AgentDef is a plain object with a statically-typed `mode`.
+ */
+export function buildAgent(def: AgentDef, model: string): AgentConfig {
+  return { ...def.factory(model), mode: def.mode };
 }
 
 /**
@@ -61,14 +63,14 @@ export function collectAgents(
 ): Record<string, AgentConfig> {
   const out: Record<string, AgentConfig> = {};
 
-  for (const [name, factory] of Object.entries(agentSources)) {
+  for (const [name, def] of Object.entries(agentSources)) {
     const ov = overrides[name];
     if (ov?.disable) {
       console.log(`[oh-y-lockie-agent] agent ${name} disabled by config`);
       continue;
     }
 
-    const model = ov?.model ?? factory.defaultModel;
+    const model = ov?.model ?? def.defaultModel;
 
     if (availableModels && !availableModels.has(model)) {
       console.log(
@@ -77,7 +79,7 @@ export function collectAgents(
       continue;
     }
 
-    out[name] = buildAgent(factory, model);
+    out[name] = buildAgent(def, model);
   }
 
   return out;
@@ -103,48 +105,27 @@ export type AgentCategoryMap = {
 
 /**
  * Build the lockieListAgentsTool's category map from the registry.
- * Categorization follows description keywords (same rules as before).
+ *
+ * Categorization uses the explicit `def.category` field — NOT description
+ * keyword matching. This means editing an agent's description can never
+ * silently move it to the wrong category.
  */
 export function buildAgentCategoryMap(
   overrides: Record<string, AgentOverride> = {},
 ): AgentCategoryMap {
-  const primary: string[] = [];
-  const design: string[] = [];
-  const review: string[] = [];
-  const domain: string[] = [];
-  const quality: string[] = [];
+  const map: AgentCategoryMap = {
+    primary: [],
+    design: [],
+    review: [],
+    domain: [],
+    quality: [],
+  };
 
-  for (const [name, factory] of Object.entries(agentSources)) {
+  for (const [name, def] of Object.entries(agentSources)) {
     if (overrides[name]?.disable) continue;
-
-    if (factory.mode === "primary") {
-      primary.push(name);
-      continue;
-    }
-
-    const desc = (factory(factory.defaultModel).description || "").toLowerCase();
-    // Order matters: more specific semantic categories (领域/合规/测试/验证/审查)
-    // are matched before broad design keywords like "固件架构", so a "领域专家"
-    // is not mis-filed under design.
-    if (desc.includes("领域") || desc.includes("合规")) {
-      domain.push(name);
-    } else if (desc.includes("代码") || desc.includes("安全审计") || desc.includes("架构审查")) {
-      review.push(name);
-    } else if (desc.includes("测试") || desc.includes("验证")) {
-      quality.push(name);
-    } else if (
-      desc.includes("电源") ||
-      desc.includes("启动") ||
-      desc.includes("内存") ||
-      desc.includes("固件架构") ||
-      desc.includes("时序") ||
-      desc.includes("寄存器")
-    ) {
-      design.push(name);
-    } else {
-      design.push(name);
-    }
+    // safe: def.category is one of the literal keys of AgentCategoryMap
+    map[def.category].push(name);
   }
 
-  return { primary, design, review, domain, quality };
+  return map;
 }

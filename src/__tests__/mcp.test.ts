@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { getPlatformCommand, CANONICAL_MCP_SERVERS, getCanonicalMcpServers } from "../mcp.js";
+import os from "node:os";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import {
+  getPlatformCommand,
+  CANONICAL_MCP_SERVERS,
+  getCanonicalMcpServers,
+  atomicWriteJson,
+} from "../mcp.js";
 
 // ─── getPlatformCommand ─────────────────────────────────────────
 
@@ -82,5 +90,39 @@ describe("getCanonicalMcpServers", () => {
     expect(servers.codegraph.type).toBe("local");
     expect(servers.codegraph.enabled).toBe(true);
     expect(servers.codegraph.command).toBeDefined();
+  });
+});
+
+// ─── atomicWriteJson ───────────────────────────────────────────
+
+describe("atomicWriteJson", () => {
+  it("writes content, leaves .bak of original, no .tmp residue", () => {
+    const dir = mkdtempSync(join(os.tmpdir(), "lockie-atomic-"));
+    const target = join(dir, "target.json");
+    writeFileSync(target, JSON.stringify({ old: true }), "utf-8");
+
+    atomicWriteJson(target, { new: true });
+
+    // Target holds the new content.
+    expect(JSON.parse(readFileSync(target, "utf-8"))).toEqual({ new: true });
+    // .bak holds the pre-write content — recovery path works.
+    expect(JSON.parse(readFileSync(target + ".bak", "utf-8"))).toEqual({ old: true });
+    // .tmp is gone — rename completed, no half-written residue.
+    expect(existsSync(target + ".tmp")).toBe(false);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("writes a new file when target did not exist (no .bak, no crash)", () => {
+    const dir = mkdtempSync(join(os.tmpdir(), "lockie-atomic-"));
+    const target = join(dir, "fresh.json");
+
+    atomicWriteJson(target, { fresh: true });
+
+    expect(JSON.parse(readFileSync(target, "utf-8"))).toEqual({ fresh: true });
+    expect(existsSync(target + ".bak")).toBe(false);
+    expect(existsSync(target + ".tmp")).toBe(false);
+
+    rmSync(dir, { recursive: true, force: true });
   });
 });

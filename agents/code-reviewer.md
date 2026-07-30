@@ -95,5 +95,5 @@ Categorize every finding:
 ## Composition
 
 - **Invoke directly when:** the user asks for a review of a specific change, file, or PR.
-- **Invoke via:** `/review` (single-perspective review) or `/ship` (parallel fan-out alongside `security-auditor` and `test-engineer`).
-- **Do not invoke from another persona.** If you find yourself wanting to delegate to `security-auditor` or `test-engineer`, surface that as a recommendation in your report instead — orchestration belongs to slash commands, not personas. See [agents/README.md](README.md).
+- **Invoke via:** `code-review-and-quality` skill（自然语言「代码评审」触发）. For pre-ship multi-perspective review alongside `security-auditor` and `test-engineer`, use the `ship-review` skill（自然语言「发布前审查」触发）.
+- **Do not invoke from another persona.** If you find yourself wanting to delegate to `security-auditor` or `test-engineer`, surface that as a recommendation in your report instead — orchestration belongs to skills, not personas. See [agents/README.md](README.md).

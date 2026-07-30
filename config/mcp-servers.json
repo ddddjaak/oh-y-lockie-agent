@@ -1,0 +1,6 @@
+{
+  "codegraph": ["codegraph", "serve", "--mcp"],
+  "context7": ["npx", "-y", "@upstash/context7-mcp"],
+  "memory": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+  "sequential-thinking": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"]
+}
