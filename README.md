@@ -372,7 +372,7 @@ npm uninstall -g oh-y-lockie-agent
 
 ## 版本
 
-- **插件版本**: 1.1.1
+- **插件版本**: 1.1.2
 - **兼容 OpenCode**: >= 1.0
 - **npm**: https://www.npmjs.com/package/oh-y-lockie-agent
 - **GitHub**: https://github.com/ddddjaak/oh-y-lockie-agent
