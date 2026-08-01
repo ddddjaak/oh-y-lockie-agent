@@ -72,13 +72,14 @@ oh-y-lockie-agent (Plugin)
 │
 ├── src/
 │   ├── index.ts          # OpenCode Plugin 入口
-│   │   ├── config hook              ── collectAgents() 注入 agent + MCP 配置
+│   │   ├── config hook              ── collectAgents() 注入 agent + MCP 配置 + 更新提醒
 │   │   ├── chat.message hook        ── 意图分类 → 自动路由 skill
 │   │   ├── experimental.chat.system.transform hook
 │   │   │                            ── 注入 Skill Routing Table 到 system prompt
-│   │   └── tool                     ── lockie_list_agents
+│   │   └── tool                     ── lockie_list_agents / lockie_status
 │   │
-│   ├── config.ts         # 配置加载（3 级优先级链 + 合并 overrides/mcp）
+│   ├── config.ts         # 配置加载（3 级优先级链 + 合并 overrides/mcp/updateCheck）
+│   ├── update-checker.ts # 版本更新提醒（npm registry 检查 + TUI toast + 日志兜底）
 │   ├── skills.ts         # Skill 匹配引擎（关键词提取 + 评分匹配）
 │   ├── mcp.ts            # MCP 诊断 / 注入
 │   ├── agents/           # Agent 定义（definitions / index / prompts / types）
@@ -167,9 +168,10 @@ oh-y-lockie-agent (Plugin)
 
 ## Tool
 
-插件注册了一个工具供 AI 调用：
+插件注册了以下工具供 AI 调用：
 
 - **`lockie_list_agents`** — 列出所有可用的 agent，支持按分类筛选（`all` / `design` / `review` / `domain` / `quality`）
+- **`lockie_status`** — 插件健康检查：活跃 agent 与各自解析到的模型、skill 索引、MCP 服务器状态、配置链、遥测开关、目标芯片上下文
 
 ---
 
@@ -239,6 +241,7 @@ npm run setup-mcp
 - `src/__tests__/config.test.ts` — 配置加载链（优先级合并、jsonc 解析）
 - `src/__tests__/skills.test.ts` — Skill 匹配（关键词提取、评分匹配）
 - `src/__tests__/mcp.test.ts` — MCP 诊断 / 注入
+- `src/__tests__/update-checker.test.ts` — 版本检查（semver 比较、防抖、toast 重试、日志兜底）
 - `src/agents/__tests__/agents.test.ts` — Agent 定义 / 注册表
 
 ---
@@ -272,6 +275,28 @@ Agent 的默认模型在 `src/agents/definitions.ts` 中通过 `defaultModel` �
 
 创建 `<project>/.opencode/oh-y-lockie-agent.jsonc`，优先于用户级配置。
 
+### 完整配置示例
+
+```jsonc
+{
+  // 可选：模型覆盖（agent.<name>.model / disable）
+  "agent": {
+    "architect": { "model": "openai/glm-5.1" },
+    "explore": { "disable": true }
+  },
+  // 可选：MCP 服务器（与 opencode.json 的 mcp 段合并，仅添加缺失项）
+  "mcp": {
+    "custom-tool": { "type": "local", "command": ["npx", "custom-tool"] }
+  },
+  // 可选：目标芯片上下文（agent 给出针对性建议）
+  "target": { "chip": "CS32F103C8T6", "family": "Cortex-M3" },
+  // 可选：路由遥测开关（默认开启，写入 telemetry-routes.jsonl，不含用户内容）
+  "telemetry": true,
+  // 可选：更新提醒（默认开启，24h 防抖，仅提醒不自动更新）
+  "updateCheck": { "enabled": true, "intervalHours": 24 }
+}
+```
+
 ---
 
 ## 升级
@@ -280,7 +305,43 @@ Agent 的默认模型在 `src/agents/definitions.ts` 中通过 `defaultModel` �
 # npm 全局安装方式升级
 npm install -g oh-y-lockie-agent@latest
 
-# OpenCode 裸名引用方式：无需手动升级，OpenCode 启动时自动拉取 latest
+# OpenCode 裸名引用方式：清缓存后重启
+rm -rf ~/.cache/opencode/packages/oh-y-lockie-agent@latest && opencode
+```
+
+> ⚠️ **裸名引用并非每次启动都自动更新**：OpenCode 会把拉取到的插件缓存在
+> `~/.cache/opencode/packages/`，同一版本不会重复拉取（历史缓存 bug 甚至可能
+> 锁死在旧版本，需清缓存恢复）。因此请以**更新提醒**为准，不要依赖"启动即最新"。
+
+### 更新提醒
+
+插件每次启动时（默认 24 小时防抖）异步检查 npm registry，发现新版本后在
+TUI 右下角弹出提醒（8 秒）：
+
+```
+┌──────────────────────────────────────┐
+│ oh-y-lockie-agent 有新版本           │
+│ v1.0.2 → v1.1.0（请手动更新）       │
+└──────────────────────────────────────┘
+```
+
+- **只提醒，不自动更新**：opencode 缓存机制决定了自动重装不可靠，升级由你手动执行
+- **TUI 未就绪时自动重试**：toast 发送失败会在 3s / 8s 后重试，全部失败则写入
+  `~/.opencode/oh-y-lockie-agent/update-notice.log` 兜底（日志包含时间戳与版本号）
+- **不重复打扰**：同一版本只提醒一次；同一版本号不会再弹第二次
+- **可关闭**：见下方 `updateCheck` 配置
+
+### 更新检查配置
+
+在 `~/.config/opencode/oh-y-lockie-agent.jsonc`（或项目级 `.opencode/` 同名文件）中：
+
+```jsonc
+{
+  "updateCheck": {
+    "enabled": true,       // false = 完全关闭更新检查
+    "intervalHours": 24    // 检查间隔（1 ~ 720 小时，默认 24）
+  }
+}
 ```
 
 ---
@@ -301,7 +362,7 @@ npm uninstall -g oh-y-lockie-agent
 
 ## 版本
 
-- **插件版本**: 1.0.0
+- **插件版本**: 1.1.0
 - **兼容 OpenCode**: >= 1.0
 - **npm**: https://www.npmjs.com/package/oh-y-lockie-agent
 - **GitHub**: https://github.com/ddddjaak/oh-y-lockie-agent

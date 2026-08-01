@@ -198,6 +198,42 @@ describe("validatePluginConfig — schema enforcement", () => {
     expect(r.success).toBe(true);
   });
 
+  it("accepts valid updateCheck config", () => {
+    const r = validatePluginConfig(
+      { updateCheck: { enabled: false, intervalHours: 6 } },
+      "test.jsonc",
+    );
+    expect(r.success).toBe(true);
+    expect(r.data?.updateCheck?.enabled).toBe(false);
+    expect(r.data?.updateCheck?.intervalHours).toBe(6);
+  });
+
+  it("rejects unknown field in updateCheck (strict)", () => {
+    const r = validatePluginConfig(
+      { updateCheck: { enabled: true, intervalHours: 24, autoUpdate: true } },
+      "test.jsonc",
+    );
+    expect(r.success).toBe(false);
+    expect(r.error).toContain("autoUpdate");
+  });
+
+  it("rejects wrong type for intervalHours (must be integer)", () => {
+    const r = validatePluginConfig({ updateCheck: { intervalHours: "24" } }, "test.jsonc");
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects intervalHours out of range", () => {
+    expect(validatePluginConfig({ updateCheck: { intervalHours: 0 } }, "test.jsonc").success).toBe(false);
+    expect(validatePluginConfig({ updateCheck: { intervalHours: 721 } }, "test.jsonc").success).toBe(false);
+  });
+
+  it("exposes updateCheck through the config chain with defaults absent", () => {
+    const config = loadPluginConfig();
+    // No updateCheck key in the plugin default config → undefined, which the
+    // update-checker interprets as "enabled, 24h interval".
+    expect(config.updateCheck).toBeUndefined();
+  });
+
   it("rejects unknown field in target (strict)", () => {
     const r = validatePluginConfig({ target: { chip: "X", bogus: true } }, "test.jsonc");
     expect(r.success).toBe(false);

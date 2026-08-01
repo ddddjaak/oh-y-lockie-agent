@@ -62,6 +62,19 @@ export const TargetContextSchema = z
   })
   .strict();
 
+/**
+ * Update-checker settings. Notify-only: never auto-updates (opencode caches
+ * the installed package; reinstall is the user's call).
+ */
+export const UpdateCheckSchema = z
+  .object({
+    /** Master toggle. Default true. Set false to disable all update checks. */
+    enabled: z.boolean().optional(),
+    /** Debounce window between registry checks, in hours. Default 24, min 1, max 720 (30 days). */
+    intervalHours: z.number().int().min(1).max(720).optional(),
+  })
+  .strict();
+
 /** Top-level plugin config. strict() rejects unknown top-level keys.
  *  $schema is allowed (JSON Schema standard hint field, unused by the loader). */
 export const PluginConfigSchema = z
@@ -73,6 +86,8 @@ export const PluginConfigSchema = z
     /** Route telemetry toggle. Default true. When false, no routing events are
      *  written to telemetry-routes.jsonl. Set false for privacy-sensitive envs. */
     telemetry: z.boolean().optional(),
+    /** Update-notification settings (npm registry check). */
+    updateCheck: UpdateCheckSchema.optional(),
   })
   .strict();
 
@@ -81,6 +96,7 @@ export const PluginConfigSchema = z
 export type AgentOverrideParsed = z.infer<typeof AgentOverrideSchema>;
 export type McpServerParsed = z.infer<typeof McpServerSchema>;
 export type TargetContext = z.infer<typeof TargetContextSchema>;
+export type UpdateCheckParsed = z.infer<typeof UpdateCheckSchema>;
 export type PluginConfigParsed = z.infer<typeof PluginConfigSchema>;
 
 // ─── Validation helper ──────────────────────────────────────────

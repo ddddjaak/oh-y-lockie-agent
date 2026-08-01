@@ -23,6 +23,7 @@ import { classifyIntentWithDetail, detectFanout } from "./intent.js";
 import { diagnoseMcpStatus } from "./mcp.js";
 import { readOpenCodeConfig } from "./mcp.js";
 import { recordRouteEvent, setTelemetryEnabled } from "./telemetry.js";
+import { checkForUpdate } from "./update-checker.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
@@ -207,6 +208,7 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
     mcp: mcpConfig,
     telemetry: telemetryEnabled,
     target: targetContext,
+    updateCheck: updateCheckCfg,
   } = loadPluginConfig(cwd);
 
   // Telemetry toggle (default on; config can disable for privacy-sensitive envs)
@@ -233,6 +235,14 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
 
   return {
     config: async (cfg: Config) => {
+      // Update notification: fire-and-forget, never awaited, never blocks
+      // config merging. Debounced by intervalHours in update-state.json.
+      void checkForUpdate(input.client, {
+        currentVersion: PKG_VERSION,
+        enabled: updateCheckCfg?.enabled,
+        intervalHours: updateCheckCfg?.intervalHours,
+      });
+
       if (!cfg.agent) cfg.agent = {};
       // safe: Config.agent is an open string-keyed map; we only inject built-in
       // agents and never read typed fields back through this reference.

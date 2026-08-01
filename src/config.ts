@@ -28,6 +28,7 @@ import {
   type PluginConfigParsed,
   type McpServerParsed,
   type TargetContext,
+  type UpdateCheckParsed,
 } from "./config-schema.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,6 +45,8 @@ export interface PluginConfig {
   target?: TargetContext;
   /** Route telemetry toggle (undefined = default on). */
   telemetry?: boolean;
+  /** Update-notification settings (undefined = defaults). */
+  updateCheck?: UpdateCheckParsed;
 }
 
 // ─── Config chain ────────────────────────────────────────────────
@@ -110,6 +113,7 @@ export function loadPluginConfig(cwd?: string): PluginConfig {
   let overrides: Record<string, AgentOverride> = defaultCfg?.agent ?? {};
   const mcpConfig: Record<string, McpServerParsed> = { ...(defaultCfg?.mcp ?? {}) };
   let target: TargetContext | undefined = defaultCfg?.target;
+  let updateCheck: UpdateCheckParsed | undefined = defaultCfg?.updateCheck;
 
   // 2. Attempt user-level override
   const userPath = join(homedir(), ".config", "opencode", CONFIG_FILENAME);
@@ -125,6 +129,9 @@ export function loadPluginConfig(cwd?: string): PluginConfig {
     }
     if (userCfg.target) {
       target = { ...(target ?? {}), ...userCfg.target };
+    }
+    if (userCfg.updateCheck) {
+      updateCheck = { ...(updateCheck ?? {}), ...userCfg.updateCheck };
     }
     console.log(`[oh-y-lockie-agent] user config loaded: ${userPath}`);
   }
@@ -149,9 +156,12 @@ export function loadPluginConfig(cwd?: string): PluginConfig {
         target = { ...(target ?? {}), ...projectCfg.target };
       }
       if (projectCfg.telemetry !== undefined) telemetry = projectCfg.telemetry;
+      if (projectCfg.updateCheck) {
+        updateCheck = { ...(updateCheck ?? {}), ...projectCfg.updateCheck };
+      }
       console.log(`[oh-y-lockie-agent] project config loaded: ${projectPath}`);
     }
   }
 
-  return { overrides, mcp: mcpConfig, target, telemetry };
+  return { overrides, mcp: mcpConfig, target, telemetry, updateCheck };
 }
