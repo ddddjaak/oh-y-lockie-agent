@@ -24,6 +24,7 @@ import { diagnoseMcpStatus } from "./mcp.js";
 import { readOpenCodeConfig } from "./mcp.js";
 import { recordRouteEvent, setTelemetryEnabled } from "./telemetry.js";
 import { checkForUpdate } from "./update-checker.js";
+import { log, warn, error } from "./logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
@@ -35,7 +36,7 @@ function getPkgVersion(): string {
   } catch (err) {
     // Non-fatal: version is cosmetic (used only in log lines). But we log the
     // failure so a corrupted package.json doesn't disappear silently.
-    console.error("[oh-y-lockie-agent] failed to read package.json version:", err);
+    error("failed to read package.json version:", err);
     return "unknown";
   }
 }
@@ -194,7 +195,7 @@ function recordEvent(event: unknown): void {
   const e = event as { type?: string; properties?: Record<string, unknown> };
   const type = e?.type ?? "unknown";
   if (type.includes("error") || type.includes("Error")) {
-    console.error(`[oh-y-lockie-agent] event ${type}:`, e?.properties ?? "(no details)");
+    error(`event ${type}:`, e?.properties ?? "(no details)");
   }
 }
 
@@ -218,20 +219,24 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
   const skillsDir = join(PKG_ROOT, "skills", "opencode");
   skillTable = buildSkillTable(skillsDir);
 
+  // 日志策略：info 级默认静默（不污染 TUI 输入框），仅 LOCKIE_DEBUG=1 时
+  // 输出到 stdout；所有级别始终写入 ~/.opencode/oh-y-lockie-agent/debug.log。
+  // 诊断也可用 lockie_status 工具。
   const agentKeys = getActiveAgentKeys(overrides);
-  const allAgentKeys = getAgentKeys();
-  console.log(`[oh-y-lockie-agent v${PKG_VERSION}] 已加载 ${agentKeys.length} 个活跃 agent 定义`);
+  log(`v${PKG_VERSION} 已加载 ${agentKeys.length} 个活跃 agent 定义`);
 
   // ─── MCP 状态诊断 ──────────────────────────────────────────────
   const mcpStatus = diagnoseMcpStatus();
   if (mcpStatus.missing.length > 0) {
-    console.log(
-      `[oh-y-lockie-agent] ⚠ MCP 服务器未在 opencode.json 中配置: ${mcpStatus.missing.join(", ")}\n` +
-      `  运行 npx oh-y-lockie-agent setup-mcp 自动配置，或手动添加至 opencode.json 的 "mcp" 段`,
+    warn(
+      `MCP 服务器未在 opencode.json 中配置: ${mcpStatus.missing.join(", ")}。` +
+        `运行 npx oh-y-lockie-agent setup-mcp 自动配置，或手动添加至 opencode.json 的 "mcp" 段`,
     );
   } else {
-    console.log(`[oh-y-lockie-agent] MCP 服务器状态: ${mcpStatus.configured.join(", ")} ✅`);
+    log(`MCP 服务器状态: ${mcpStatus.configured.join(", ")} ✅`);
   }
+
+  const allAgentKeys = getAgentKeys();
 
   return {
     config: async (cfg: Config) => {
@@ -286,18 +291,16 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
         }
       }
 
-      console.log(
-        `[oh-y-lockie-agent] config 注入完成 — agents: ${
-          Object.keys(cfg.agent || {}).length
-        }, mcp: ${Object.keys(cfg.mcp || {}).length}`,
+      log(
+        `config 注入完成 — agents: ${Object.keys(cfg.agent || {}).length}, mcp: ${Object.keys(cfg.mcp || {}).length}`,
       );
     },
 
     "chat.message": async (msgInput, msgOutput) => {
-      // 1. Log lockie agent usage
+      // 1. Log lockie agent usage (info 级：LOCKIE_DEBUG=1 时可见)
       const agent = msgInput.agent || "unknown";
       if (allAgentKeys.includes(agent)) {
-        console.log(`[lockie] agent=${agent} model=${msgInput.model?.modelID || "?"}`);
+        log(`agent=${agent} model=${msgInput.model?.modelID || "?"}`);
       }
 
       // 2. Only route skills for lockie agents
@@ -331,12 +334,12 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
           ignored: true,
           time: { start: Date.now() },
         });
-        console.log(`[oh-y-lockie-agent] fan-out: ${fanout.reason} (intent=${intent})`);
         recordRouteEvent({
           ts: Date.now(), intent, fanout: true, fanoutReason: fanout.reason,
           skillMatched: fanout.skill ?? null, skillScore: 0,
           textLen: textPart.text.length, matchedPhrase,
         });
+        log(`fan-out: ${fanout.reason} (intent=${intent})`);
         return;
       }
 
@@ -367,7 +370,7 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
         ignored: true,
         time: { start: Date.now() },
       });
-      console.log(`[oh-y-lockie-agent] skill route: "${match.name}" (intent=${intent})`);
+      log(`skill route: "${match.name}" (intent=${intent})`);
     },
 
     "experimental.chat.system.transform": async (_sysInput, sysOutput) => {
@@ -375,7 +378,7 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
       const alreadyInjected = sysOutput.system.some((s) => s.includes(ROUTE_MARKER));
       if (!alreadyInjected) {
         sysOutput.system.push(SKILL_ROUTE_TABLE);
-        console.log("[oh-y-lockie-agent] skill routing table injected into system prompt");
+        log("skill routing table injected into system prompt");
       }
 
       // Reference-doc index — lets agents know the bundled checklists/patterns
@@ -383,7 +386,7 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
       const refIdx = buildReferenceIndex();
       if (refIdx && !sysOutput.system.some((s) => s.includes(REFERENCE_MARKER))) {
         sysOutput.system.push(refIdx);
-        console.log("[oh-y-lockie-agent] reference index injected into system prompt");
+        log("reference index injected into system prompt");
       }
     },
 
@@ -407,7 +410,8 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
     },
 
     dispose: async () => {
-      console.log("[oh-y-lockie-agent] 已卸载");
+      // 无资源需清理（telemetry/update-state 均为文件追加/覆盖，不依赖进程生命周期）。
+      log("已卸载");
     },
   };
 };

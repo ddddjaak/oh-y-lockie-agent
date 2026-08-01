@@ -12,6 +12,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { buildRouteTableFromMap, skillsForIntent, getSkillTriggers } from "./intent.js";
 import type { Intent } from "./intent.js";
+import { log, warn, error } from "./logger.js";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ export function extractKeywords(desc: string): string[] {
  */
 export function buildSkillTable(skillsDir: string): SkillEntry[] {
   if (!existsSync(skillsDir)) {
-    console.log("[oh-y-lockie-agent] skills dir not found, skipping skill index");
+    log("skills dir not found, skipping skill index");
     return [];
   }
 
@@ -145,7 +146,7 @@ export function buildSkillTable(skillsDir: string): SkillEntry[] {
         const content = readFileSync(skillPath, "utf-8");
         const fm = parseFrontmatter(content);
         if (!fm) {
-          console.warn(`[oh-y-lockie-agent] skill ${d.name}: frontmatter missing or incomplete, skipped`);
+          warn(`skill ${d.name}: frontmatter missing or incomplete, skipped`);
           return null;
         }
         return {
@@ -156,13 +157,13 @@ export function buildSkillTable(skillsDir: string): SkillEntry[] {
       } catch (err) {
         // A single broken skill must not abort the whole index build, but we
         // log which skill failed so it doesn't silently vanish from routing.
-        console.error(`[oh-y-lockie-agent] skill ${d.name}: failed to load SKILL.md:`, err);
+        error(`skill ${d.name}: failed to load SKILL.md:`, err);
         return null;
       }
     })
     .filter((e): e is SkillEntry => e !== null);
 
-  console.log(`[oh-y-lockie-agent] skill index: ${entries.length} skills loaded`);
+  log(`skill index: ${entries.length} skills loaded`);
   return entries;
 }
 
@@ -227,7 +228,7 @@ export function matchSkillDetail(userText: string, skillTable: SkillEntry[], int
 
   // Require at least 2 points to avoid noise matches
   if (bestScore >= 2 && bestMatch) {
-    console.log(`[oh-y-lockie-agent] skill match: "${bestMatch.name}" (score=${bestScore})`);
+    log(`skill match: "${bestMatch.name}" (score=${bestScore})`);
     return { entry: bestMatch, score: bestScore };
   }
 

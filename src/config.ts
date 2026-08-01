@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { parse, ParseError } from "jsonc-parser";
 import type { AgentOverride } from "./agents/types.js";
+import { log, warn, error } from "./logger.js";
 import {
   validatePluginConfig,
   type PluginConfigParsed,
@@ -65,20 +66,20 @@ function loadJsoncFile(filePath: string): PluginConfigParsed | null {
     const errors: ParseError[] = [];
     const result = parse(raw, errors);
     if (errors.length > 0) {
-      console.error(`[oh-y-lockie-agent] config parse errors in ${filePath}:`, errors);
+      error(`config parse errors in ${filePath}:`, errors);
       return null;
     }
     const validation = validatePluginConfig(result, filePath);
     if (!validation.success) {
-      console.error(validation.error);
+      error(validation.error);
       return null;
     }
     for (const w of validation.warnings) {
-      console.warn(`[oh-y-lockie-agent] ${w}`);
+      warn(w);
     }
     return validation.data ?? null;
   } catch (err) {
-    console.error(`[oh-y-lockie-agent] failed to load config ${filePath}:`, err);
+    error(`failed to load config ${filePath}:`, err);
     return null;
   }
 }
@@ -133,7 +134,7 @@ export function loadPluginConfig(cwd?: string): PluginConfig {
     if (userCfg.updateCheck) {
       updateCheck = { ...(updateCheck ?? {}), ...userCfg.updateCheck };
     }
-    console.log(`[oh-y-lockie-agent] user config loaded: ${userPath}`);
+    log(`user config loaded: ${userPath}`);
   }
 
   // 3. Attempt project-level override (if cwd provided)
@@ -159,7 +160,7 @@ export function loadPluginConfig(cwd?: string): PluginConfig {
       if (projectCfg.updateCheck) {
         updateCheck = { ...(updateCheck ?? {}), ...projectCfg.updateCheck };
       }
-      console.log(`[oh-y-lockie-agent] project config loaded: ${projectPath}`);
+      log(`project config loaded: ${projectPath}`);
     }
   }
 

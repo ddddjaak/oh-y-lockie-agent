@@ -16,6 +16,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { parse, ParseError } from "jsonc-parser";
+import { log, warn, error } from "./logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
@@ -48,7 +49,7 @@ function loadMcpCommands(): Record<string, string[]> {
   } catch (err) {
     // Non-fatal: callers tolerate an empty map, but we log so a missing or
     // corrupt JSON doesn't make every MCP server silently disappear.
-    console.error(`[oh-y-lockie-agent] failed to load ${jsonPath}:`, err);
+    error(`failed to load ${jsonPath}:`, err);
     return {};
   }
 }
@@ -122,12 +123,12 @@ export function readOpenCodeConfig(): Record<string, unknown> | null {
     const errors: ParseError[] = [];
     const result = parse(raw, errors);
     if (errors.length > 0) {
-      console.error(`[oh-y-lockie-agent] opencode.json parse errors:`, errors);
+      error(`opencode.json parse errors:`, errors);
       return null;
     }
     return result as Record<string, unknown>;
   } catch (err) {
-    console.error(`[oh-y-lockie-agent] failed to read opencode.json:`, err);
+    error(`failed to read opencode.json:`, err);
     return null;
   }
 }
@@ -184,14 +185,14 @@ export function injectMcpToOpenCodeConfig(): number {
   const userConfig = readOpenCodeConfig();
 
   if (!userConfig) {
-    console.error("[oh-y-lockie-agent] opencode.json 不存在或解析失败，跳过 MCP 注入");
+    warn("opencode.json 不存在或解析失败，跳过 MCP 注入");
     return 0;
   }
 
   const missing = getMissingMcpServers(userConfig);
 
   if (Object.keys(missing).length === 0) {
-    console.log("[oh-y-lockie-agent] 所有 MCP 服务器已在 opencode.json 中");
+    log("所有 MCP 服务器已在 opencode.json 中");
     return 0;
   }
 
@@ -213,10 +214,10 @@ export function injectMcpToOpenCodeConfig(): number {
   try {
     atomicWriteJson(configPath, updatedConfig);
     const names = Object.keys(missing).join(", ");
-    console.log(`[oh-y-lockie-agent] 已添加 MCP 服务器到 opencode.json: ${names}(原子写,备份 .bak)`);
+    log(`已添加 MCP 服务器到 opencode.json: ${names}(原子写,备份 .bak)`);
     return Object.keys(missing).length;
   } catch (err) {
-    console.error(`[oh-y-lockie-agent] 写入 opencode.json 失败:`, err);
+    error(`写入 opencode.json 失败:`, err);
     // 清理残留的 .tmp(若 rename 前失败)
     return 0;
   }

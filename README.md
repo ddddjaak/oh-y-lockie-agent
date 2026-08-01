@@ -45,13 +45,21 @@ npm install -g oh-y-lockie-agent
 
 ### 验证
 
-重启 OpenCode，日志应出现：
+重启 OpenCode。**注意：插件日志默认不打印到终端**（`console.log` 会被
+opencode TUI 渲染到输入框区域，污染界面——v1.1.1 起改为日志门面控制）。
 
-```
-[oh-y-lockie-agent v1.0.0] 已加载 16 个活跃 agent 定义
-[oh-y-lockie-agent] skill index: 55 skills loaded
-[oh-y-lockie-agent] config 注入完成 — agents: 18, mcp: 4
-```
+### 日志策略（开发 / 排障）
+
+| 级别 | 终端输出 | 文件 `~/.opencode/oh-y-lockie-agent/debug.log` |
+|------|----------|-----------------------------------------------|
+| `log`（常规） | 仅 `LOCKIE_DEBUG=1` 时 | 始终记录（7 天 / 5MB 轮转） |
+| `warn` / `error` | 始终（仅出问题时出现） | 始终记录 |
+
+- **正常使用**：终端完全干净，无日志干扰输入框
+- **开发 / 调试插件**：`LOCKIE_DEBUG=1 opencode` 启动，所有日志输出到终端
+- **事后排障**：无需重启，直接查看 `~/.opencode/oh-y-lockie-agent/debug.log`
+  （每条含 ISO 时间戳 + 级别，如 `[2026-08-01T07:00:00.000Z] [info] ...`）
+- **健康状态**：也可用 `lockie_status` 工具查询（agents / MCP / 配置链）
 
 ### MCP 注入机制
 
@@ -79,6 +87,7 @@ oh-y-lockie-agent (Plugin)
 │   │   └── tool                     ── lockie_list_agents / lockie_status
 │   │
 │   ├── config.ts         # 配置加载（3 级优先级链 + 合并 overrides/mcp/updateCheck）
+│   ├── logger.ts         # 日志门面（LOCKIE_DEBUG 控制 stdout + debug.log 文件轮转）
 │   ├── update-checker.ts # 版本更新提醒（npm registry 检查 + TUI toast + 日志兜底）
 │   ├── skills.ts         # Skill 匹配引擎（关键词提取 + 评分匹配）
 │   ├── mcp.ts            # MCP 诊断 / 注入
@@ -242,6 +251,7 @@ npm run setup-mcp
 - `src/__tests__/skills.test.ts` — Skill 匹配（关键词提取、评分匹配）
 - `src/__tests__/mcp.test.ts` — MCP 诊断 / 注入
 - `src/__tests__/update-checker.test.ts` — 版本检查（semver 比较、防抖、toast 重试、日志兜底）
+- `src/__tests__/logger.test.ts` — 日志门面（LOCKIE_DEBUG 控制、文件持久化）
 - `src/agents/__tests__/agents.test.ts` — Agent 定义 / 注册表
 
 ---
@@ -362,7 +372,7 @@ npm uninstall -g oh-y-lockie-agent
 
 ## 版本
 
-- **插件版本**: 1.1.0
+- **插件版本**: 1.1.1
 - **兼容 OpenCode**: >= 1.0
 - **npm**: https://www.npmjs.com/package/oh-y-lockie-agent
 - **GitHub**: https://github.com/ddddjaak/oh-y-lockie-agent
