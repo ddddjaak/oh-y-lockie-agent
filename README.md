@@ -4,7 +4,7 @@
 
 ## 概述
 
-`oh-y-lockie-agent` 是一个 **OpenCode Plugin**，提供 **2 个主 Agent**（architect / firmware）、共享 **14 个专项 Subagent** 和 **62 个 Skills**（55 个 opencode 端 + 7 个 agents 端），通过自然语言路由自动触发，覆盖 SE（系统架构）与 AE（应用工程）两条开发管线。
+`oh-y-lockie-agent` 是一个 **OpenCode Plugin**，提供 **2 个主 Agent**（architect / firmware）、共享 **14 个专项 Subagent** 和 **63 个 Skills**（56 个 opencode 端 + 7 个 agents 端），通过自然语言路由自动触发，覆盖 SE（系统架构）与 AE（应用工程）两条开发管线。
 
 | 主 Agent | 管线 | 适用场景 |
 |----------|------|----------|
@@ -88,7 +88,7 @@ oh-y-lockie-agent (Plugin)
 │   └── oh-y-lockie-agent.jsonc   # 默认配置（agent model 覆盖 + MCP）
 │
 ├── agents/      # 16 个 agent prompt 文件
-├── skills/      # 62 个 skill 定义（55 opencode + 7 agents）
+├── skills/      # 63 个 skill 定义（56 opencode + 7 agents）
 ├── references/  # 5 个参考文档
 └── scripts/     # postinstall / preuninstall / setup-mcp
 ```
@@ -120,7 +120,7 @@ oh-y-lockie-agent (Plugin)
 |------|------|------|
 | 主 Agents | 2 | Architect（SE 管线）+ Firmware（AE 管线） |
 | Subagents | 14 | 专项 review / audit / design 子代理 |
-| Skills | 62 | 专业领域能力（55 opencode + 7 agents） |
+| Skills | 63 | 专业领域能力（56 opencode + 7 agents） |
 | MCP | 4 | codegraph / context7 / memory / sequential-thinking |
 
 ### 主 Agent 对比
@@ -153,7 +153,7 @@ oh-y-lockie-agent (Plugin)
 | `timing-analyst` | 时序分析：时钟树、PLL 配置、建立/保持时序、抖动预算 | ddddjaak/mimo-v2.5-pro |
 | `register-map-generator` | 寄存器映射生成：从数据手册提取寄存器定义、验证对齐 | ddddjaak/mimo-v2.5 |
 
-### Skills 清单（62 个）
+### Skills 清单（63 个）
 
 | 类别 | Skills |
 |------|--------|
@@ -201,7 +201,7 @@ oh-y-lockie-agent/
 ├── references/                   # 5 个参考文档
 │
 ├── skills/
-│   ├── opencode/                 # 55 个 opencode 端 skill
+│   ├── opencode/                 # 56 个 opencode 端 skill
 │   └── agents/                   # 7 个 agents 端 skill
 │
 ├── docs/                         # 文档（对比报告等）

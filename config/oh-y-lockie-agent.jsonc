@@ -9,6 +9,12 @@
   // 【注意】agent 的定义（prompt / 描述 / mode / color）已收归代码
   //        src/agents/definitions.ts，不在本文件维护。这里只改 model / disable。
   //
+  // 【模型解析】agent 的 model 默认留空——插件启动时自动探测 opencode.json
+  // 里配置的 provider，把每个 agent 解析到实际可用的模型（override >
+  // 定义默认模型 > 同名模型 > 任一可用模型）。你只需在下面填入想覆盖的
+  // agent，例如把 architect 换成你的主模型：
+  //     "architect": { "model": "my-provider/my-model" }
+  //
   // 【配置层级】（优先级从高到低）:
   //   1. 项目级:  .opencode/oh-y-lockie-agent.jsonc
   //   2. 用户级:  ~/.config/opencode/oh-y-lockie-agent.jsonc
@@ -20,75 +26,75 @@
     // ── 主 Agent ──────────────────────────────────────────────────
 
     "architect": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     "firmware": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     // ── Subagent: 设计类 ─────────────────────────────────────────
 
     "power-architect": {
-      "model": "ddddjaak/mimo-v2.5-pro"
+      // "model": "my-provider/my-pro-model"
     },
 
     "boot-bringup-specialist": {
-      "model": "ddddjaak/mimo-v2.5-pro"
+      // "model": "my-provider/my-pro-model"
     },
 
     "memory-map-specialist": {
-      "model": "ddddjaak/mimo-v2.5-pro"
+      // "model": "my-provider/my-pro-model"
     },
 
     "firmware-architect": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     "timing-analyst": {
-      "model": "ddddjaak/mimo-v2.5-pro"
+      // "model": "my-provider/my-pro-model"
     },
 
     "register-map-generator": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     // ── Subagent: 审查类 ─────────────────────────────────────────
 
     "code-reviewer": {
-      "model": "ddddjaak/mimo-v2.5-pro"
+      // "model": "my-provider/my-pro-model"
     },
 
     "security-auditor": {
-      "model": "ddddjaak/mimo-v2.5-pro"
+      // "model": "my-provider/my-pro-model"
     },
 
     "system-architect": {
-      "model": "ddddjaak/mimo-v2.5-pro"
+      // "model": "my-provider/my-pro-model"
     },
 
     // ── Subagent: 领域专家 ───────────────────────────────────────
 
     "fw-domain-expert": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     "hw-domain-expert": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     "compliance-reviewer": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     // ── Subagent: 质量保障 ───────────────────────────────────────
 
     "test-engineer": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     "verification-engineer": {
-      "model": "ddddjaak/mimo-v2.5"
+      // "model": "my-provider/my-model"
     },
 
     // ── 禁用默认 agent ───────────────────────────────────────────

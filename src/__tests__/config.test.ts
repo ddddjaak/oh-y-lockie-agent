@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
-import os from "node:os";
+import { describe, it, expect, vi } from "vitest";
 import { loadPluginConfig } from "../config.js";
 import { validatePluginConfig } from "../config-schema.js";
 import {
@@ -12,17 +11,16 @@ import type { AgentOverride } from "../agents/types.js";
 
 // Isolate from any real user-level config (~/.config/opencode/oh-y-lockie-agent.jsonc).
 // loadPluginConfig merges user/project overrides on top of the plugin default; these
-// unit tests assert the *plugin default*, so stub os.homedir() to a path that contains
-// no override file. This keeps the suite deterministic across machines.
-let homedirSpy: ReturnType<typeof vi.spyOn>;
-beforeAll(() => {
-  homedirSpy = vi
-    .spyOn(os, "homedir")
-    .mockReturnValue(process.platform === "win32" ? "C:\\lockie-isolated-home" : "/lockie-isolated-home");
-});
-afterAll(() => {
-  homedirSpy.mockRestore();
-});
+// unit tests assert the *plugin default*, so stub node:os.homedir() to a path that
+// contains no override file. vi.mock (not spyOn) is required — node:os exposes a
+// read-only ESM namespace, so assigning/spying on homedir has no effect on the
+// named import config.ts uses.
+vi.mock("node:os", () => ({
+  homedir: () =>
+    process.platform === "win32" ? "C:\\lockie-isolated-home" : "/lockie-isolated-home",
+  tmpdir: () =>
+    process.platform === "win32" ? "C:\\lockie-isolated-tmp" : "/tmp",
+}));
 
 // ─── loadPluginConfig ────────────────────────────────────────────
 
@@ -34,16 +32,18 @@ describe("loadPluginConfig", () => {
     expect(config.mcp).toBeDefined();
   });
 
-  it("includes the architect agent with its default model", () => {
+  it("keeps the architect agent entry (model left empty for smart resolution)", () => {
     const config = loadPluginConfig();
     expect(config.overrides.architect).toBeDefined();
-    expect(config.overrides.architect.model).toBe("ddddjaak/mimo-v2.5");
+    // Model is intentionally NOT pre-filled — the plugin resolves it from the
+    // user's configured providers at runtime (see src/models.ts).
+    expect(config.overrides.architect.model).toBeUndefined();
   });
 
-  it("includes the firmware agent with its default model", () => {
+  it("keeps the firmware agent entry (model left empty for smart resolution)", () => {
     const config = loadPluginConfig();
     expect(config.overrides.firmware).toBeDefined();
-    expect(config.overrides.firmware.model).toBe("ddddjaak/mimo-v2.5");
+    expect(config.overrides.firmware.model).toBeUndefined();
   });
 
   it("disables explore and general built-in agents", () => {

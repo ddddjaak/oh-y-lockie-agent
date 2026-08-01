@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
-import os from "node:os";
+import { describe, it, expect, vi } from "vitest";
 import { lockieServer } from "../index.js";
 import type { Hooks } from "@opencode-ai/plugin";
 import { ROUTE_MARKER } from "../skills.js";
@@ -12,18 +11,16 @@ import { ROUTE_MARKER } from "../skills.js";
  *   - chat.message                        : skill routing prepend
  *   - experimental.chat.system.transform  : routing table injection
  *
- * config.test.ts-style homedir isolation is reused so the suite is deterministic
- * across machines (no real ~/.config/opencode/oh-y-lockie-agent.jsonc leakage).
+ * node:os.homedir() is mocked so loadPluginConfig never reads the real
+ * ~/.config/opencode/oh-y-lockie-agent.jsonc (deterministic across machines).
+ * vi.mock (not spyOn) is required — node:os exposes a read-only ESM namespace.
  */
-let homedirSpy: ReturnType<typeof vi.spyOn>;
-beforeAll(() => {
-  homedirSpy = vi
-    .spyOn(os, "homedir")
-    .mockReturnValue(process.platform === "win32" ? "C:\\lockie-isolated-home" : "/lockie-isolated-home");
-});
-afterAll(() => {
-  homedirSpy.mockRestore();
-});
+vi.mock("node:os", () => ({
+  homedir: () =>
+    process.platform === "win32" ? "C:\\lockie-isolated-home" : "/lockie-isolated-home",
+  tmpdir: () =>
+    process.platform === "win32" ? "C:\\lockie-isolated-tmp" : "/tmp",
+}));
 
 /** Boot the plugin once and cache the hooks — lockieServer is the entry point. */
 async function getHooks(): Promise<Hooks> {
@@ -129,13 +126,14 @@ describe("chat.message hook", () => {
 // ─── experimental.chat.system.transform hook ────────────────────
 
 describe("experimental.chat.system.transform hook", () => {
-  it("injects the skill routing table into the system prompt", async () => {
+  it("injects the skill routing table and reference index into the system prompt", async () => {
     const hooks = await getHooks();
     const sysOutput = { system: ["existing system text"] };
 
     await hooks["experimental.chat.system.transform"]!({} as never, sysOutput as never);
 
-    expect(sysOutput.system.length).toBe(2);
+    // original + routing table + reference index
+    expect(sysOutput.system.length).toBe(3);
     expect(sysOutput.system.some((s) => s.includes(ROUTE_MARKER))).toBe(true);
   });
 
@@ -148,11 +146,43 @@ describe("experimental.chat.system.transform hook", () => {
 
     const markerCount = sysOutput.system.filter((s) => s.includes(ROUTE_MARKER)).length;
     expect(markerCount).toBe(1);
+    const refCount = sysOutput.system.filter((s) => s.includes("[oh-y-lockie-agent 参考文档]")).length;
+    expect(refCount).toBe(1);
+  });
+});
+
+// ─── plugin tools ───────────────────────────────────────────────
+
+describe("plugin tools", () => {
+  it("exposes lockie_list_agents and lockie_status", async () => {
+    const hooks = await getHooks();
+    expect(hooks.tool).toBeDefined();
+    expect(hooks.tool!.lockie_list_agents).toBeDefined();
+    expect(hooks.tool!.lockie_status).toBeDefined();
+  });
+
+  it("lockie_list_agents returns categorized agents", async () => {
+    const hooks = await getHooks();
+    const tool = hooks.tool!.lockie_list_agents as { execute: (args?: { category?: string }) => Promise<string> };
+    const output = await tool.execute({ category: "all" });
+    expect(output).toContain("主 Agent:");
+    expect(output).toContain("architect");
+    expect(output).toContain("审查类: code-reviewer");
+  });
+
+  it("lockie_status reports agents, skills, mcp and config", async () => {
+    const hooks = await getHooks();
+    const tool = hooks.tool!.lockie_status as { execute: () => Promise<string> };
+    const output = await tool.execute();
+    expect(output).toContain("健康状态");
+    expect(output).toContain("[agents]");
+    expect(output).toContain("[skills]");
+    expect(output).toContain("[mcp]");
+    expect(output).toContain("[config]");
   });
 });
 
 // ─── tool.execute.before hook — arg guard ──────────────────────
-
 describe("tool.execute.before hook — null-byte scrubbing", () => {
   it("scrubs null bytes from string args in place (nested + arrays)", async () => {
     const hooks = await getHooks();

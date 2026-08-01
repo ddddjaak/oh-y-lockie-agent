@@ -39,6 +39,36 @@ describe("buildAgent", () => {
   });
 });
 
+describe("read-only permission (review/domain/quality agents)", () => {
+  const readonlyCategories = ["review", "domain", "quality"] as const;
+  const expectedPermission = { edit: "deny", todowrite: "deny" };
+
+  it("applies read-only permission to every review/domain/quality agent", () => {
+    for (const [name, def] of Object.entries(agentSources) as [string, AgentDef][]) {
+      const cfg = buildAgent(def, "test/model");
+      if (readonlyCategories.includes(def.category as (typeof readonlyCategories)[number])) {
+        expect(cfg.permission, `${name} should deny edit/todowrite`).toEqual(expectedPermission);
+      }
+    }
+  });
+
+  it("does NOT apply read-only permission to primary/design agents", () => {
+    for (const [name, def] of Object.entries(agentSources) as [string, AgentDef][]) {
+      const cfg = buildAgent(def, "test/model");
+      if (!readonlyCategories.includes(def.category as (typeof readonlyCategories)[number])) {
+        expect(cfg.permission, `${name} must keep write access`).toBeUndefined();
+      }
+    }
+  });
+
+  it("read-only agents total 8 (review 3 + domain 3 + quality 2)", () => {
+    const n = Object.entries(agentSources).filter(([, d]) =>
+      readonlyCategories.includes(d.category as (typeof readonlyCategories)[number]),
+    ).length;
+    expect(n).toBe(8);
+  });
+});
+
 describe("getAgentKeys", () => {
   it("returns all registered agent names", () => {
     expect(getAgentKeys()).toEqual(Object.keys(agentSources));

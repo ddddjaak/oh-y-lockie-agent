@@ -14,11 +14,14 @@ import {
   buildAgentCategoryMap,
   agentSources,
 } from "./agents/index.js";
+import { probeFromRawProvider } from "./models.js";
+import { injectTargetContext, buildReferenceIndex, REFERENCE_MARKER } from "./context.js";
 import type { AgentOverride } from "./agents/types.js";
 import { buildSkillTable, matchSkillDetail, SKILL_ROUTE_TABLE, ROUTE_MARKER } from "./skills.js";
 import type { SkillEntry } from "./skills.js";
 import { classifyIntentWithDetail, detectFanout } from "./intent.js";
 import { diagnoseMcpStatus } from "./mcp.js";
+import { readOpenCodeConfig } from "./mcp.js";
 import { recordRouteEvent, setTelemetryEnabled } from "./telemetry.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -74,6 +77,80 @@ const lockieListAgentsTool = tool({
   },
 });
 
+// ─── Plugin health check tool ─────────────────────────────────────
+
+/**
+ * One-shot diagnostic of the whole plugin: active agents with their RESOLVED
+ * models, skill index size, MCP server status, config chain, telemetry toggle,
+ * and target context. Everything is recomputed at call time so the output is
+ * always current (hot-reload safe) rather than reflecting plugin-boot state.
+ */
+const lockieStatusTool = tool({
+  description:
+    "检查 oh-y-lockie-agent 插件健康状态：活跃 agent 与各自解析到的模型、skill 索引、MCP 服务器、配置链、遥测开关、目标芯片上下文。",
+  args: {},
+  async execute() {
+    const lines: string[] = [];
+    const { overrides, mcp, target, telemetry } = loadPluginConfig();
+
+    // Model resolution — mirror the config hook exactly.
+    const userCfg = readOpenCodeConfig();
+    const probe = probeFromRawProvider(userCfg?.provider);
+    const agents = collectAgents(overrides, probe);
+    const activeKeys = Object.keys(agents);
+
+    lines.push(`oh-y-lockie-agent v${PKG_VERSION} 健康状态`);
+    lines.push("");
+
+    // 1. Agents
+    lines.push(`[agents] ${activeKeys.length}/${getAgentKeys().length} 活跃`);
+    for (const name of activeKeys) {
+      const cfg = agents[name];
+      const model = cfg.model ?? "(未设置)";
+      // Only flag unavailable when we could actually probe the environment —
+      // an empty probe (no provider section) means "unknown", not "unavailable".
+      const marked =
+        model !== "(未设置)" && probe.any.length > 0 && !probe.available.has(model)
+          ? " ⚠模型不可用"
+          : "";
+      lines.push(`  ${name} -> ${model}${marked}`);
+    }
+    const missing = getAgentKeys().filter((k) => !activeKeys.includes(k));
+    if (missing.length) lines.push(`  已禁用: ${missing.join(", ")}`);
+
+    // 2. Skills
+    lines.push("");
+    lines.push(`[skills] ${skillTable.length} 个已索引 (skills/opencode)`);
+
+    // 3. MCP
+    const mcpStatus = diagnoseMcpStatus();
+    lines.push("");
+    if (mcpStatus.missing.length === 0) {
+      lines.push(`[mcp] 全部配置: ${mcpStatus.configured.join(", ")}`);
+    } else {
+      lines.push(`[mcp] 已配置: ${mcpStatus.configured.join(", ") || "(无)"}`);
+      lines.push(`[mcp] ⚠ 缺失: ${mcpStatus.missing.join(", ")}`);
+      lines.push(`  → 运行 "npm run setup-mcp" 或 node scripts/setup-mcp.mjs 自动配置`);
+    }
+
+    // 4. Config chain
+    lines.push("");
+    lines.push(`[config] override 数量: ${Object.keys(overrides).length}`);
+    lines.push(`[config] 遥测: ${telemetry === false ? "关闭" : "开启"}`);
+    if (target && Object.keys(target).some((k) => (target as Record<string, string | undefined>)[k])) {
+      lines.push(
+        `[target] ${["chip", "family", "sdk", "toolchain"]
+          .map((k) => `${k}=${(target as Record<string, string | undefined>)[k] ?? "-"}`)
+          .join(" ")}`,
+      );
+    } else {
+      lines.push("[target] 未配置（agent 给出通用建议）");
+    }
+
+    return lines.join("\n");
+  },
+});
+
 // ─── Tool arg guards & event recording ──────────────────────────
 
 /**
@@ -82,30 +159,24 @@ const lockieListAgentsTool = tool({
  * truncation. Always-on, permission-free guard — future debugger-mcp write
  * operations will layer stricter confirmation on top.
  *
- * Mutates in place: OpenCode passes `output.args` as a mutable container.
+ * Returns the (possibly cleaned) value so the caller can reassign top-level
+ * strings; nested containers are mutated in place.
  */
-function scrubNullBytes(value: unknown): void {
-  if (typeof value === "string") return; // immutable; caller reassigns via container
+function scrubNullBytes(value: unknown): unknown {
+  if (typeof value === "string") return value.replace(/\0/g, "");
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
-      if (typeof value[i] === "string") {
-        value[i] = (value[i] as string).replace(/\0/g, "");
-      } else {
-        scrubNullBytes(value[i]);
-      }
+      value[i] = typeof value[i] === "string" ? value[i].replace(/\0/g, "") : scrubNullBytes(value[i]);
     }
-    return;
+    return value;
   }
   if (value && typeof value === "object") {
     const obj = value as Record<string, unknown>;
     for (const k of Object.keys(obj)) {
-      if (typeof obj[k] === "string") {
-        obj[k] = (obj[k] as string).replace(/\0/g, "");
-      } else {
-        scrubNullBytes(obj[k]);
-      }
+      obj[k] = typeof obj[k] === "string" ? (obj[k] as string).replace(/\0/g, "") : scrubNullBytes(obj[k]);
     }
   }
+  return value;
 }
 
 /**
@@ -131,7 +202,12 @@ function recordEvent(event: unknown): void {
 const lockieServer = async (input: PluginInput): Promise<Hooks> => {
   // Load user-tunable config from the priority chain（含项目级 cwd）
   const cwd = process.cwd();
-  const { overrides, mcp: mcpConfig, telemetry: telemetryEnabled } = loadPluginConfig(cwd);
+  const {
+    overrides,
+    mcp: mcpConfig,
+    telemetry: telemetryEnabled,
+    target: targetContext,
+  } = loadPluginConfig(cwd);
 
   // Telemetry toggle (default on; config can disable for privacy-sensitive envs)
   setTelemetryEnabled(telemetryEnabled !== false);
@@ -160,21 +236,28 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
       if (!cfg.agent) cfg.agent = {};
       // safe: Config.agent is an open string-keyed map; we only inject built-in
       // agents and never read typed fields back through this reference.
-      const target = cfg.agent as Record<string, unknown>;
+      const agentTarget = cfg.agent as Record<string, unknown>;
 
       // Inject our built-in agents (user override > factory default model).
       // We never clobber agents the user already defined in opencode.json.
-      const agents = collectAgents(overrides);
-      for (const [key, val] of Object.entries(agents)) {
-        if (!(key in target)) {
-          target[key] = val;
+      // Model resolution: probe the user's configured providers so hardcoded
+      // defaults like "ddddjaak/mimo-v2.5" resolve to an actually-available
+      // model (e.g. "my-mimo/mimo-v2.5") instead of failing at runtime.
+      const probe = probeFromRawProvider(cfg.provider);
+      const agents = collectAgents(overrides, probe);
+      // Enrich each agent's prompt with the configured target-chip context
+      // (chip/family/sdk/toolchain). Empty target → no-op, zero overhead.
+      const enriched = injectTargetContext(agents, targetContext);
+      for (const [key, val] of Object.entries(enriched)) {
+        if (!(key in agentTarget)) {
+          agentTarget[key] = val;
         }
       }
 
       // Apply built-in agent disable overrides (explore / general, etc.)
       for (const [name, ov] of Object.entries(overrides)) {
         if (ov.disable && !(name in agentSources)) {
-          target[name] = { disable: true };
+          agentTarget[name] = { disable: true };
         }
       }
 
@@ -284,17 +367,26 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
         sysOutput.system.push(SKILL_ROUTE_TABLE);
         console.log("[oh-y-lockie-agent] skill routing table injected into system prompt");
       }
+
+      // Reference-doc index — lets agents know the bundled checklists/patterns
+      // exist and can be read on demand (lightweight, cached, idempotent).
+      const refIdx = buildReferenceIndex();
+      if (refIdx && !sysOutput.system.some((s) => s.includes(REFERENCE_MARKER))) {
+        sysOutput.system.push(refIdx);
+        console.log("[oh-y-lockie-agent] reference index injected into system prompt");
+      }
     },
 
     tool: {
       lockie_list_agents: lockieListAgentsTool,
+      lockie_status: lockieStatusTool,
     },
 
     "tool.execute.before": async (_input, output) => {
       // Always-on guard: strip null bytes from tool args to prevent shell
       // injection / truncation. Future debugger-mcp write ops add stricter
       // confirmation on top of this baseline.
-      scrubNullBytes(output.args);
+      output.args = scrubNullBytes(output.args);
     },
 
     event: async (input) => {

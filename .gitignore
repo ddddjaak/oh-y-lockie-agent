@@ -38,3 +38,10 @@ npm-debug.log*
 
 # CodeGraph
 .codegraph/
+
+# Deepwork state (git-local)
+.slim/deepwork/
+
+# Tool artifacts (local state, not part of the package)
+.ignore
+opencode

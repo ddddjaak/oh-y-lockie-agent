@@ -15,6 +15,7 @@
 
 import type { AgentConfig } from "@opencode-ai/sdk";
 import type { AgentDef, AgentOverride } from "./types.js";
+import { resolveAgentModel, type ModelProbe } from "../models.js";
 import * as defs from "./definitions.js";
 
 export * from "./types.js";
@@ -52,14 +53,20 @@ export function buildAgent(def: AgentDef, model: string): AgentConfig {
 /**
  * Collect all active agent configs for injection into OpenCode's `cfg.agent`.
  *
- * @param overrides       User-tunable per-agent overrides (model / disable).
- * @param availableModels Optional set of models known to be available. When
- *                         provided, agents whose resolved model is absent are
- *                         skipped (mirrors omo-opencode's availability gating).
+ * @param overrides User-tunable per-agent overrides (model / disable).
+ * @param gate      Optional model gating/resolution:
+ *                    - `Set<string>` : strict legacy gate — agents whose model is
+ *                      not in the set are SKIPPED (mirrors omo-opencode).
+ *                    - `ModelProbe`  : smart resolution (see src/models.ts) —
+ *                      agents resolve to an available model (override > default >
+ *                      same-name-on-other-provider > any); unresolvable explicit
+ *                      overrides are skipped with a loud log.
+ *                    - undefined     : register every agent with its default —
+ *                      legacy behavior, keeps fixtures working.
  */
 export function collectAgents(
   overrides: Record<string, AgentOverride> = {},
-  availableModels?: Set<string>,
+  gate?: Set<string> | ModelProbe,
 ): Record<string, AgentConfig> {
   const out: Record<string, AgentConfig> = {};
 
@@ -70,16 +77,27 @@ export function collectAgents(
       continue;
     }
 
-    const model = ov?.model ?? def.defaultModel;
-
-    if (availableModels && !availableModels.has(model)) {
-      console.log(
-        `[oh-y-lockie-agent] skip ${name}: model "${model}" not in available set`,
-      );
+    // Legacy strict gate: exact model membership, skip otherwise.
+    if (gate instanceof Set) {
+      const model = ov?.model ?? def.defaultModel;
+      if (!gate.has(model)) {
+        console.log(
+          `[oh-y-lockie-agent] skip ${name}: model "${model}" not in available set`,
+        );
+        continue;
+      }
+      out[name] = buildAgent(def, model);
       continue;
     }
 
-    out[name] = buildAgent(def, model);
+    // Smart resolution (probe or no gate).
+    const resolved = resolveAgentModel(ov, gate, def.defaultModel);
+    if (resolved.reason !== "no-probe" && resolved.reason !== "default") {
+      console.log(
+        `[oh-y-lockie-agent] agent ${name}: model "${resolved.model}" (${resolved.reason})`,
+      );
+    }
+    out[name] = buildAgent(def, resolved.model);
   }
 
   return out;

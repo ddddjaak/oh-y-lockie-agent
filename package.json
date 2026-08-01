@@ -1,6 +1,6 @@
 {
   "name": "oh-y-lockie-agent",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "芯片系统架构师 + 嵌入式工程师双管线智能编排插件 — OpenCode即插即用。含2主Agent+14Subagent+62Skill(55 opencode + 7 agents)。自然语言触发，无需 slash 命令。",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,8 +1,8 @@
 # oh-y-lockie-agent — OpenCode 插件：芯片系统设计 + 嵌入式固件双管线
 
-> **oh-y-lockie-agent** 是一个 OpenCode 插件，提供芯片系统设计（SE）和嵌入式固件开发（AE）双管线智能编排。包含 2 个主 Agent、14 个 Subagent、62 个 Skill（55 opencode + 7 agents）。
+> **oh-y-lockie-agent** 是一个 OpenCode 插件，提供芯片系统设计（SE）和嵌入式固件开发（AE）双管线智能编排。包含 2 个主 Agent、14 个 Subagent、63 个 Skill（56 opencode + 7 agents）。
 
-**生成日期:** 2026-07-30 | **版本:** 2.0.0
+**生成日期:** 2026-08-01 | **版本:** 1.0.2
 
 ---
 
@@ -68,7 +68,7 @@ oh-y-lockie-agent 提供双管线编排：
 OpenCode 运行时
   └── oh-y-lockie-agent 插件
         ├── Agent 层        — 2 主 Agent + 14 Subagent
-        ├── Skill 层        — 62 个技能（55 opencode + 7 agents），自然语言触发
+        ├── Skill 层       — 63 个技能（56 opencode + 7 agents），自然语言触发
         ├── Config 层       — 3 级优先级链 + JSONC 解析
         ├── MCP 层          — codegraph + context7 + memory + sequential-thinking
         └── Reference 层    — 5 份参考文档
@@ -111,8 +111,8 @@ oh-y-lockie-agent/
 │   ├── test-engineer.md
 │   └── verification-engineer.md
 
-├── skills/                       # 62 个 SKILL.md
-│   ├── opencode/                 # 55 个 OpenCode 技能
+├── skills/                       # 63 个 SKILL.md
+│   ├── opencode/                 # 56 个 OpenCode 技能
 │   │   ├── algorithm-design/
 │   │   ├── api-and-interface-design/
 │   │   ├── architecture-design/
@@ -395,7 +395,7 @@ OpenCode 加载插件
   └─→ lockieServer(input)                          # src/index.ts
         ├─→ loadPluginConfig(cwd)                  # 3 级优先级链 → { overrides, mcp }
         ├─→ collectAgents(overrides)               # src/agents/index.ts：工厂 → AgentConfig 并应用 override
-        ├─→ buildSkillTable(skillsDir)             # 从插件目录构建 51+7 个 skill 索引
+        ├─→ buildSkillTable(skillsDir)             # 从插件目录构建 56+7 个 skill 索引
         ├─→ diagnoseMcpStatus()                    # 检查 opencode.json MCP 配置
         ├─→ log active agent count                 # 输出已加载 agent 数量
         ├─→ 返回 Hooks 对象
@@ -557,6 +557,7 @@ npm pack                 # 打包 .tgz
 npm install <package>.tgz
 # postinstall 会自动执行:
 #   MCP 服务器  → ~/.config/opencode/opencode.json（注入缺失的 MCP 条目）
+#   配置模板    → ~/.config/opencode/oh-y-lockie-agent.jsonc（首次生成，不覆盖已有）
 #
 # 以下内容通过插件 config hook 注入，无需复制:
 #   agents/     → 读取 .md 内容 → inline prompt 注入 cfg.agent

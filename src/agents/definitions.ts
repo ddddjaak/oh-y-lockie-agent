@@ -19,6 +19,16 @@ import type { AgentConfig } from "@opencode-ai/sdk";
 import type { AgentDef } from "./types.js";
 import { loadPrompt } from "./prompts.js";
 
+/**
+ * Read-only permission profile for review/domain/quality agents.
+ *
+ * These agents exist to ASSESS artifacts, never to mutate them: editing source,
+ * rewriting files, or mutating the todo list would defeat the purpose of an
+ * independent review. They still keep bash/read/grep/glob at their defaults so
+ * a reviewer can compile, run tests, and inspect the tree.
+ */
+const READONLY_PERMISSION = { edit: "deny", todowrite: "deny" } as const;
+
 // ─── 主 Agent (primary) ───────────────────────────────────────────
 
 export const architect: AgentDef = {
@@ -121,6 +131,7 @@ export const codeReviewer: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("code-reviewer.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "Senior code reviewer — 五维度代码审查：正确性、可读性、架构、安全、性能",
   }),
   mode: "subagent",
@@ -132,6 +143,7 @@ export const securityAuditor: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("security-auditor.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "安全审计师 — 固件安全审计：安全启动、加密、密钥管理、通信安全、物理安全",
   }),
   mode: "subagent",
@@ -143,6 +155,7 @@ export const systemArchitect: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("system-architect.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "系统架构审查师 — 从系统级视角审查架构决策：模块边界、接口契约、约束分析",
   }),
   mode: "subagent",
@@ -156,6 +169,7 @@ export const fwDomainExpert: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("fw-domain-expert.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "固件领域专家 — 审查固件架构决策、RTOS配置、驱动设计、内存规划",
   }),
   mode: "subagent",
@@ -167,6 +181,7 @@ export const hwDomainExpert: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("hw-domain-expert.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "硬件领域专家 — 审查硬件设计决策：引脚分配、电源树、时钟树、PCB布局约束",
   }),
   mode: "subagent",
@@ -178,6 +193,7 @@ export const complianceReviewer: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("compliance-reviewer.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "合规审查员 — 审查设计合规性：行业标准、法规要求、安全规范",
   }),
   mode: "subagent",
@@ -191,6 +207,7 @@ export const testEngineer: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("test-engineer.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "测试工程师 — 审查设计方案的可测试性、测试覆盖率和测试策略",
   }),
   mode: "subagent",
@@ -202,6 +219,7 @@ export const verificationEngineer: AgentDef = {
   factory: (model): AgentConfig => ({
     model,
     prompt: loadPrompt("verification-engineer.md"),
+    permission: { ...READONLY_PERMISSION },
     description: "验证工程师 — 验证设计方案完整性和一致性，追溯矩阵审查",
   }),
   mode: "subagent",

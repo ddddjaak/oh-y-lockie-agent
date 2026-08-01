@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // oh-y-lockie-agent postinstall — setup MCP on npm install
 //
-// 设计原则：尽量不污染 ~/.config/opencode/
+// 设计原则：最小侵入 ~/.config/opencode/
+// - oh-y-lockie-agent.jsonc → 首次安装时自动生成配置模板（不覆盖已有文件）
 // - commands/   → 已移除（能力改由 skill + 自然语言路由提供，无需 slash 命令）
 // - agents/   → 不复制（config hook 注入 inline prompt）
 // - skills/   → 不复制（路由系统从插件目录读取）
 // - references/ → 不复制（文档，用户可从插件目录访问）
-import { existsSync, readFileSync, writeFileSync, copyFileSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, copyFileSync, renameSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -42,12 +43,20 @@ try {
   const openCodeConfigPath = join(OPENCODE_DIR, "opencode.json");
 
   /** 纯 MCP 命令定义（不含平台包装）— 从 config/mcp-servers.json 读取
-   *  与 src/mcp.ts 共享同一份 JSON 单源，避免两处硬编码漂移 */
-  let MCP_COMMANDS = {};
+   *  与 src/mcp.ts 共享同一份 JSON 单源，避免两处硬编码漂移。
+   *  读取失败时回退到内置列表（与 preuninstall 一致），绝不让 npm install
+   *  静默注入 0 个 MCP 服务器。 */
+  const FALLBACK_MCP_SERVERS = {
+    codegraph: ["codegraph", "serve", "--mcp"],
+    context7: ["npx", "-y", "@upstash/context7-mcp"],
+    memory: ["npx", "-y", "@modelcontextprotocol/server-memory"],
+    "sequential-thinking": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+  };
+  let MCP_COMMANDS = FALLBACK_MCP_SERVERS;
   try {
     MCP_COMMANDS = JSON.parse(readFileSync(join(PKG_ROOT, "config", "mcp-servers.json"), "utf-8"));
   } catch (e) {
-    console.error(`  [失败] 读取 config/mcp-servers.json: ${e.message}`);
+    console.error(`  [失败] 读取 config/mcp-servers.json，使用内置回退: ${e.message}`);
   }
 
   /** 跨平台适配：Windows 上需要 cmd /c 前缀 */
@@ -90,6 +99,25 @@ try {
     }
   } else {
     console.log(`  [跳过] opencode.json 不存在于 ${openCodeConfigPath}`);
+  }
+
+  // ─── 用户级配置模板生成 ──────────────────────────────────────────
+  // 安装时自动生成一份可编辑的用户级配置模板到 ~/.config/opencode/，
+  // 让用户知道去哪儿改 subagent 模型。已有文件不覆盖。
+  console.log("[oh-y-lockie-agent] 检查用户级配置模板...");
+  const userConfigPath = join(OPENCODE_DIR, "oh-y-lockie-agent.jsonc");
+  if (existsSync(userConfigPath)) {
+    console.log(`  [OK] 用户配置已存在: ${userConfigPath}（不覆盖）`);
+  } else {
+    try {
+      mkdirSync(OPENCODE_DIR, { recursive: true });
+      const defaultConfigPath = join(PKG_ROOT, "config", "oh-y-lockie-agent.jsonc");
+      copyFileSync(defaultConfigPath, userConfigPath);
+      console.log(`  [OK] 已生成用户配置模板: ${userConfigPath}`);
+      console.log(`  [提示] 编辑此文件可修改各 subagent 的模型，详见文件内注释。`);
+    } catch (e) {
+      console.error(`  [失败] 生成用户配置模板: ${e.message}`);
+    }
   }
 
   console.log("[oh-y-lockie-agent] postinstall: 完成");
