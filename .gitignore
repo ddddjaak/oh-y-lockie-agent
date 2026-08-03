@@ -44,4 +44,4 @@ npm-debug.log*
 
 # Tool artifacts (local state, not part of the package)
 .ignore
-opencode
+/opencode
