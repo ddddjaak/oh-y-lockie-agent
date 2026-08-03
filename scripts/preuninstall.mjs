@@ -10,7 +10,7 @@
 // 不需要清理的（从未复制 / 由 config hook 注入，无残留文件）：
 // - agents/ → config hook 注入，不残留文件
 // - references/ → 从插件目录读取，不残留文件
-import { existsSync, readFileSync, writeFileSync, copyFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, copyFileSync, renameSync, rmSync, readdirSync } from "node:fs";
 import { join, dirname, relative, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -144,6 +144,15 @@ try {
   }
 } catch (e) {
   console.error(`  [警告] 无法移除 skills manifest: ${e.message}`);
+}
+// 清理空的 skills 父目录（所有 skill 删除后残留的空壳）
+try {
+  if (existsSync(SKILLS_DEST) && readdirSync(SKILLS_DEST).length === 0) {
+    rmSync(SKILLS_DEST, { force: true });
+    console.log(`  [删除] 空目录 ${SKILLS_DEST}`);
+  }
+} catch (e) {
+  console.error(`  [警告] 无法清理空 skills 目录: ${e.message}`);
 }
 
 console.log("\n[oh-y-lockie-agent] preuninstall: 完成");
