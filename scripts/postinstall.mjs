@@ -141,6 +141,22 @@ try {
   const SKILLS_DEST = join(OPENCODE_DIR, "skills");
   const MANIFEST_PATH = join(OPENCODE_DIR, ".oh-y-lockie-agent-skills.json");
 
+  /**
+   * 大小写不敏感定位 skill 目录内的主规范文件（兼容 SKILL.md / skill.md）。
+   * 历史上 company-docx-generator 以小写 skill.md 提交，在大小写敏感文件系统
+   * （Linux/macOS）上被精确匹配静默跳过——此处按实际目录条目解析，文件名大小写
+   * 不再影响复制。
+   */
+  function findSkillMd(skillDir) {
+    const exact = join(skillDir, "SKILL.md");
+    if (existsSync(exact)) return exact;
+    if (!existsSync(skillDir)) return null;
+    const lower = readdirSync(skillDir, { withFileTypes: true }).find(
+      (f) => f.isFile() && f.name.toLowerCase() === "skill.md",
+    );
+    return lower ? join(skillDir, lower.name) : null;
+  }
+
   let manifest = { skills: {} };
   try {
     if (existsSync(MANIFEST_PATH)) {
@@ -162,8 +178,8 @@ try {
       .map((d) => d.name);
     for (const dir of dirs) {
       const skillDir = join(root, dir);
-      const skillPath = join(skillDir, "SKILL.md");
-      if (!existsSync(skillPath)) continue;
+      const skillPath = findSkillMd(skillDir);
+      if (!skillPath) continue;
       const destDir = join(SKILLS_DEST, dir);
       if (existsSync(destDir)) {
         skillsSkipped++;

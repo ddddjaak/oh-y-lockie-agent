@@ -1,10 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   parseFrontmatter,
   extractKeywords,
   matchSkill,
   loadSkillContent,
   listSkillNames,
+  resolveSkillMd,
   SKILL_LOAD_TOOL_NAME,
 } from "../skills.js";
 import type { SkillEntry } from "../skills.js";
@@ -187,5 +191,52 @@ describe("listSkillNames", () => {
 describe("SKILL_LOAD_TOOL_NAME", () => {
   it("is the tool name the routing instructions reference", () => {
     expect(SKILL_LOAD_TOOL_NAME).toBe("lockie_load_skill");
+  });
+});
+
+// ─── resolveSkillMd (case-insensitive spec lookup) ──────────────
+
+describe("resolveSkillMd", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "lockie-skill-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finds the spec by exact uppercase SKILL.md", () => {
+    const skillDir = join(tmpDir, "s1");
+    mkdirSync(skillDir, { recursive: true });
+    const spec = join(skillDir, "SKILL.md");
+    writeFileSync(spec, "---\nname: s1\n---\n");
+    expect(resolveSkillMd(skillDir)).toBe(spec);
+  });
+
+  it("finds a lowercase skill.md (the company-docx-generator regression case)", () => {
+    // Regression: company-docx-generator shipped `skill.md` (lowercase), which
+    // exact "SKILL.md" matching skipped on case-sensitive filesystems. On
+    // case-insensitive filesystems (Windows dev machines) the exact probe
+    // succeeds and the returned path casing follows the probe, so only assert
+    // that a spec file is resolved — casing is not part of the contract.
+    const skillDir = join(tmpDir, "s2");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "skill.md"), "---\nname: s2\n---\n");
+    const resolved = resolveSkillMd(skillDir);
+    expect(resolved).not.toBeNull();
+    expect(existsSync(resolved!)).toBe(true);
+  });
+
+  it("returns null when the directory has no spec file", () => {
+    const skillDir = join(tmpDir, "s3");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "helper.js"), "console.log(1);\n");
+    expect(resolveSkillMd(skillDir)).toBeNull();
+  });
+
+  it("returns null when the directory does not exist", () => {
+    expect(resolveSkillMd(join(tmpDir, "missing"))).toBeNull();
   });
 });

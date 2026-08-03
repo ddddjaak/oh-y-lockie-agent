@@ -130,6 +130,30 @@ export function extractKeywords(desc: string): string[] {
 // ─── Skill index building ────────────────────────────────────────
 
 /**
+ * Locate a skill's main markdown file case-insensitively.
+ *
+ * WHY: `company-docx-generator` once shipped its spec as lowercase `skill.md`,
+ * which exact "SKILL.md" matching silently skipped on case-sensitive
+ * filesystems (Linux/macOS) — the skill vanished from routing, install copies
+ * and the loader while Windows tests stayed green. Resolving against actual
+ * directory entries makes file-name case irrelevant, on every platform.
+ *
+ * @param skillDir  Absolute path of the skill directory.
+ * @returns Path of the skill spec file, or null when none exists.
+ */
+export function resolveSkillMd(skillDir: string): string | null {
+  const exact = join(skillDir, "SKILL.md");
+  if (existsSync(exact)) return exact;
+  // Guard before readdirSync — a nonexistent directory must return null,
+  // not throw ENOENT.
+  if (!existsSync(skillDir)) return null;
+  const lower = readdirSync(skillDir, { withFileTypes: true }).find(
+    (f) => f.isFile() && f.name.toLowerCase() === "skill.md",
+  );
+  return lower ? join(skillDir, lower.name) : null;
+}
+
+/**
  * Scan a skills directory and build the skill index from SKILL.md files.
  *
  * @param skillsDir  Absolute path to the skills directory containing skill subdirectories.
@@ -144,8 +168,8 @@ export function buildSkillTable(skillsDir: string): SkillEntry[] {
   const entries = readdirSync(skillsDir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => {
-      const skillPath = join(skillsDir, d.name, "SKILL.md");
-      if (!existsSync(skillPath)) return null;
+      const skillPath = resolveSkillMd(join(skillsDir, d.name));
+      if (!skillPath) return null;
       try {
         const content = readFileSync(skillPath, "utf-8");
         const fm = parseFrontmatter(content);
@@ -277,8 +301,8 @@ export function listSkillNames(): string[] {
     if (!existsSync(root)) continue;
     for (const dir of readdirSync(root, { withFileTypes: true })) {
       if (!dir.isDirectory()) continue;
-      const skillPath = join(root, dir.name, "SKILL.md");
-      if (!existsSync(skillPath)) continue;
+      const skillPath = resolveSkillMd(join(root, dir.name));
+      if (!skillPath) continue;
       try {
         const fm = parseFrontmatter(readFileSync(skillPath, "utf-8"));
         names.push(fm?.name ?? dir.name);
@@ -312,8 +336,8 @@ export function loadSkillContent(query: string): LoadedSkill | null {
       const source = root.endsWith("agents") ? "agents" : "opencode";
       for (const d of readdirSync(root, { withFileTypes: true })) {
         if (!d.isDirectory()) continue;
-        const skillPath = join(root, d.name, "SKILL.md");
-        if (!existsSync(skillPath)) continue;
+        const skillPath = resolveSkillMd(join(root, d.name));
+        if (!skillPath) continue;
         try {
           const fm = parseFrontmatter(readFileSync(skillPath, "utf-8"));
           found.push({ name: fm?.name ?? d.name, source, dir: join(root, d.name) });
@@ -341,10 +365,13 @@ export function loadSkillContent(query: string): LoadedSkill | null {
 
 /** Read SKILL.md content + list supporting files for a located skill. */
 function readLoadedSkill(skill: { name: string; source: string; dir: string }): LoadedSkill {
-  const skillPath = join(skill.dir, "SKILL.md");
+  // Callers only reach here for directories resolveSkillMd already confirmed,
+  // so a missing spec is a genuine invariant violation worth surfacing loudly.
+  const skillPath = resolveSkillMd(skill.dir);
+  if (!skillPath) throw new Error(`skill ${skill.name}: SKILL.md not found in ${skill.dir}`);
   const content = readFileSync(skillPath, "utf-8");
   const relatedFiles = readdirSync(skill.dir, { withFileTypes: true })
-    .filter((f) => f.isFile() && f.name !== "SKILL.md")
+    .filter((f) => f.isFile() && f.name.toLowerCase() !== "skill.md")
     .map((f) => f.name)
     .sort();
   return { name: skill.name, source: skill.source, content, relatedFiles };

@@ -24,6 +24,17 @@ const USER_CONFIG = join(OPENCODE_DIR, "oh-y-lockie-agent.jsonc");
 const SKILLS_DEST = join(OPENCODE_DIR, "skills");
 const MANIFEST_PATH = join(OPENCODE_DIR, ".oh-y-lockie-agent-skills.json");
 
+/** 大小写不敏感定位 skill 目录内的主规范文件（与 postinstall 的 findSkillMd 保持一致）。 */
+function findSkillMd(skillDir) {
+  const exact = join(skillDir, "SKILL.md");
+  if (existsSync(exact)) return exact;
+  if (!existsSync(skillDir)) return null;
+  const lower = readdirSync(skillDir, { withFileTypes: true }).find(
+    (f) => f.isFile() && f.name.toLowerCase() === "skill.md",
+  );
+  return lower ? join(skillDir, lower.name) : null;
+}
+
 /** MCP 键名从 config/mcp-servers.json 派生，与 postinstall/setup-mcp 共享单源 */
 let MCP_KEYS = [];
 try {
@@ -115,8 +126,8 @@ if (skillNames.length === 0) {
       console.error(`  [警告] 跳过越界路径: ${destDir}`);
       continue;
     }
-    const destSkill = join(destDir, "SKILL.md");
-    if (!existsSync(destSkill)) {
+    const destSkill = findSkillMd(destDir);
+    if (!destSkill) {
       kept++;
       continue;
     }
