@@ -138,7 +138,7 @@ oh-y-lockie-agent (Plugin)
   再在意图对应的 skill 子集内做关键词评分匹配（≥2 分命中），避免跨类别误路由
 - 命中后在用户消息前注入 `[SKILL_ROUTE]` 指令，让模型调用 `lockie_load_skill` 加载对应 skill
 - 路由表（按意图分组）会注入到**每个 lockie agent 的 prompt**，保证模型能看到
-- "全面审查 / 多角度审查"触发 fan-out 指令（并行调 3 个审查 agent）；"ship review / 发布前审查"路由到 `ship-review` skill
+- "全面审查 / 多角度审查"触发 fan-out 指令（并行调 3 个审查 agent）；"ship review / 发布前审查"路由到 `ship-review` skill（同样并行委托 code-reviewer / security-auditor / test-engineer 后汇总 go/no-go）
 - 每次路由尝试都会写入本地遥测（`~/.opencode/oh-y-lockie-agent/telemetry-routes.jsonl`），用于定位路由词表缺口
 
 > 命令层已移除：能力全部由 Skill 通过自然语言触发（例如「进行架构评审」「帮我做引脚复用分配」「生成内存映射」）。无需记忆 `/xxx` 命令名。

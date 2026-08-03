@@ -5,6 +5,11 @@
 > 这些能力现由 skill + 自然语言路由提供（见 `src/intent.ts` 的 `SKILL_TRIGGERS` / `FANOUT_SIGNALS`
 > 与 `skills/opencode/` 下的 skill 定义）。文中关于"persona 编排"的原则（谁负责协调、何时 fan-out）
 > 仍有参考价值，但**所有命令示例均不可执行**，请勿据此恢复 slash command。
+>
+> **关于"personas do not invoke other personas"的例外**：本插件的 fan-out 编排（`detectFanout`
+> + `ship-review` / `design-review` skill）现在通过 OpenCode 的 `task` 工具让主会话**并行委托**
+> `code-reviewer` / `security-auditor` / `test-engineer` 等 subagent 做 fresh-context 审查——
+> 这与文中"personas 不得调用其他 personas"的旧原则冲突时，以当前插件的 fan-out 设计为准。
 
 Reference catalog of agent orchestration patterns this repo endorses, plus anti-patterns to avoid. Read this before adding a new slash command that coordinates multiple personas, or before introducing a new persona that "wraps" existing ones.
 

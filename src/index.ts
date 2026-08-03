@@ -387,7 +387,7 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
       if (fanout.fanout) {
         const instruction =
           fanout.skill === "ship-review"
-            ? `[SKILL_ROUTE] 用户请求发布前审查（fan-out）。请先调用 ${SKILL_LOAD_TOOL_NAME} 工具加载 "ship-review" skill（若该工具不可用则用内置 skill 工具），它协调代码/安全/测试三视角审查并汇总 go/no-go。`
+            ? `[SKILL_ROUTE] 用户请求发布前审查（fan-out）。请先调用 ${SKILL_LOAD_TOOL_NAME} 工具加载 "ship-review" skill（若该工具不可用则用内置 skill 工具），然后用 task 工具并行调用 ${fanout.agents.join("、")} 做三视角审查，最后汇总 go/no-go。`
             : `[SKILL_ROUTE] 用户请求多视角审查（fan-out）。请用 agent 工具并行调用 ${fanout.agents.join("、")} 进行多视角审查，然后汇总各 agent 结论给出综合判断。`;
         msgOutput.parts.unshift({
           id: textPart.id || randomUUID(),

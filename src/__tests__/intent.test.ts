@@ -88,9 +88,9 @@ describe("detectFanout", () => {
   it("detects ship-review orchestration", () => {
     expect(detectFanout("ship review 这个版本", "ship")).toEqual({
       fanout: true,
-      agents: [],
+      agents: ["code-reviewer", "security-auditor", "test-engineer"],
       skill: "ship-review",
-      reason: "ship-review orchestration",
+      reason: "ship-review fan-out to 3 review agents",
     });
     expect(detectFanout("发布前审查", "ship").fanout).toBe(true);
     expect(detectFanout("go/no-go 决策", "ship").fanout).toBe(true);

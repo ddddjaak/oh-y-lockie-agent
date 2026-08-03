@@ -350,7 +350,7 @@ const REVIEW_FANOUT_AGENTS = ["code-reviewer", "security-auditor", "test-enginee
 /**
  * Detect whether the user's request should fan-out to multiple subagents.
  *
- * - "ship review" / "发布前审查" → ship-review skill (it self-orchestrates 3 perspectives)
+ * - "ship review" / "发布前审查" → ship-review skill (it fans out the same 3 review agents)
  * - "全面审查" / "多角度" + review intent → parallel fan-out to 3 review agents
  *
  * Returns { fanout: false } when no signal is present, so the caller can
@@ -363,13 +363,14 @@ export function detectFanout(text: string, intent: Intent): FanoutDecision {
   const hasSignal = FANOUT_SIGNALS.some((s) => lower.includes(s));
   if (!hasSignal) return { fanout: false, agents: [], reason: "no fan-out signal" };
 
-  // Ship review is a distinct orchestration entry — the skill coordinates the 3 perspectives internally.
+  // Ship review is a distinct orchestration entry — the skill fans out the same
+  // three review agents (fresh context) and merges them into a go/no-go verdict.
   if (lower.includes("ship review") || lower.includes("发布前审查") || lower.includes("go/no-go") || lower.includes("go no go")) {
     return {
       fanout: true,
-      agents: [],
+      agents: [...REVIEW_FANOUT_AGENTS],
       skill: "ship-review",
-      reason: "ship-review orchestration",
+      reason: "ship-review fan-out to 3 review agents",
     };
   }
 
@@ -423,7 +424,8 @@ export function buildRouteTableFromMap(): string {
 
   lines.push("### Rule");
   lines.push("- If the user's intent maps to exactly one skill, LOAD IT immediately via `lockie_load_skill` (fallback: built-in `skill` tool).");
-  lines.push("- If the user asks for a comprehensive / multi-perspective review (全面审查/多角度), fan-out to multiple review agents (code-reviewer, security-auditor, test-engineer) or load `ship-review`.");
+  lines.push("- If the user asks for a comprehensive / multi-perspective review (全面审查/多角度), fan-out to multiple review agents (code-reviewer, security-auditor, test-engineer) via the `task` tool.");
+  lines.push("- For release-readiness (ship review / 发布前审查 / go no-go), load `ship-review`; it fans out the same three agents (fresh context) and produces the go/no-go verdict.");
   lines.push("- If ambiguous (maps to 2+), pick the most specific one or ask the user.");
   lines.push("- If no match, proceed without loading a skill.");
 

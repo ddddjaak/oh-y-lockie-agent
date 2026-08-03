@@ -1,12 +1,14 @@
 ---
 name: ship-review
-description: Pre-ship multi-perspective review that orchestrates code, security, and test perspectives into a single go/no-go verdict. Use when the user says 发布前审查, ship review, 上线审查, 发布就绪, pre-ship review, go/no-go, 上线前评审. 覆盖：代码评审、安全审计、测试覆盖、发布决策。三视角汇总发布结论，替代已移除的 /ship 命令。
+description: Pre-ship multi-perspective review that orchestrates code, security, and test perspectives into a single go/no-go verdict. Use when the user says 发布前审查, ship review, 上线审查, 发布就绪, pre-ship review, go/no-go, 上线前评审. 覆盖：代码评审、安全审计、测试覆盖、发布决策。三视角并行 fan-out 到 code-reviewer / security-auditor / test-engineer 三个 subagent，汇总发布结论，替代已移除的 /ship 命令。
 ---
 
 # Ship Review
 
 > 发布前三视角审查：代码正确性 + 安全性 + 测试覆盖 → 汇总 go/no-go 决策。
-> 这是 v2.0.0 移除 `/ship` command 后的 skill 层入口。原 `/ship` 的并行 fan-out 由 OpenCode 运行时提供；本 skill 在单会话内**依次**完成三视角审查并汇总——是降级但可用的替代，不依赖已移除的 command 层。
+> 通过 `task` 工具把三视角**并行委托**给 `code-reviewer` / `security-auditor` / `test-engineer`
+> 三个 subagent（fresh context，结论相互独立），主会话只负责发起与汇总。原 `/ship` 的
+> 并行 fan-out 由此恢复；若 `task` 工具不可用（受限环境），才退回单会话依次执行并如实标注降级。
 
 ## When to Use
 
@@ -22,43 +24,36 @@ description: Pre-ship multi-perspective review that orchestrates code, security,
 
 ## Workflow
 
-依次执行三个视角，每个视角产出结构化发现，最后汇总。**不要跳过任一视角**——发布审查的价值在于三视角交叉覆盖。
+### 1. 并行 Fan-out（task 工具）
 
-### 1. Code Perspective（代码正确性 + 可读性 + 架构）
+用 `task` 工具**并行**发起三个子任务，分别委托给：
 
-对照 `code-review-and-quality` skill 的五维度（正确性 / 可读性 / 架构 / 安全 / 性能），聚焦**本次变更 diff**：
+| Subagent | 视角 | 交付物 |
+|----------|------|--------|
+| `code-reviewer` | 代码正确性 + 可读性 + 架构 | `### Code Perspective`（Critical / Important / Suggestion 分级） |
+| `security-auditor` | 安全审计 | `### Security Perspective`（Critical / High / Medium / Low 分级） |
+| `test-engineer` | 测试覆盖 + 可测试性 | `### Test Perspective`（覆盖缺口 + 可测试性倒退） |
 
-- 变更是否做了规格/任务要求的事？边界条件（null / empty / 错误路径）处理了吗？
-- 有没有引入循环依赖、破坏模块边界、错误的抽象层级？
-- 命名一致吗？控制流能不解释就读懂吗？
+每个任务使用结构化委托模板，CONTEXT 必须包含**本次变更的 diff 范围**：
 
-产出：`### Code Perspective` 段，Critical / Important / Suggestion 分级。
+```text
+TASK: 对本次变更做[代码/安全/测试]视角审查
+OUTCOME: 结构化发现，按[对应分级]列出，每个 Blocking 项给出 file:line 与修复方向
+TOOLS: 允许 Read / Grep / Bash（只读、可编译可跑测试）
+MUST: 聚焦本次 diff；只报告你能从证据支持的问题；无发现也要显式确认
+MUST_NOT: 修改任何文件；臆测未见到的代码
+CONTEXT: <本次变更范围 / diff 摘要 / 相关文件列表>
+```
 
-### 2. Security Perspective（安全审计）
+三个 subagent 是独立 fresh context，主会话**不要**替它们下结论，也不要提前把自己的判断喂给它们。
 
-对照 `security-and-hardening` skill，聚焦**本次变更引入的风险面**：
+### 2. 汇总三份报告
 
-- 输入校验、注入向量、鉴权边界
-- 密钥/凭证是否进了代码或日志
-- 新依赖的已知漏洞
-- （嵌入式场景）安全启动、OTA 完整性、调试口锁定是否受影响
+拿到三份报告后交叉核对：同一问题被多个视角命中时合并；互相矛盾的结论需要主会话裁决并说明理由。
 
-产出：`### Security Perspective` 段，按 Critical / High / Medium / Low 分级。
+### 3. Merge & Verdict
 
-### 3. Test Perspective（测试覆盖 + 可测试性）
-
-对照 `test-driven-development` skill，聚焦**变更的测试保障**：
-
-- 变更的行为有测试覆盖吗？测的是行为还是实现细节？
-- 错误路径、边界条件有测吗？
-- 有没有"测了但永远不失败"的废测试？
-- 变更是否降低了可测试性（隐藏依赖、不可注入的副作用）？
-
-产出：`### Test Perspective` 段，列出覆盖缺口和可测试性倒退。
-
-### 4. Merge & Verdict
-
-汇总三视角，给出发布决策：
+汇总后给出发布决策：
 
 ```markdown
 ## Ship Review Verdict
@@ -81,15 +76,15 @@ description: Pre-ship multi-perspective review that orchestrates code, security,
 
 ## Rules
 
-1. **三视角必须都跑**——跳过安全视角的发布审查等于没审。即使变更"看起来不涉及安全"，也要显式确认而非默认跳过。
+1. **三视角必须都跑**——跳过安全视角的发布审查等于没审。即使变更"看起来不涉及安全"，也要让 `security-auditor` 显式确认而非默认跳过。
 2. **Decision 必须明确**——GO / CONDITIONAL GO / NO-GO 三选一，不要给"看起来还行"这种模糊结论。
 3. **Critical = NO-GO**——任一视角有 Critical 级问题，Decision 自动 NO-GO，不得降级为 CONDITIONAL GO。
 4. **聚焦本次 diff**——发布审查审的是"这次要发的变更"，不是整个代码库的全量审查。全量审查用 `code-static-review`。
 5. **每个 Blocking Issue 必须可执行**——写明 file:line 和修复方向，不要"建议加强安全性"这种废话。
-6. **诚实标注降级**——本 skill 是串行三视角，不是原 `/ship` 的并行 fan-out。如果某视角需要更深的独立调查，在报告中标注"建议后续单独触发 X skill 深入"，不要假装一次审查能覆盖一切。
+6. **降级要诚实标注**——`task` 工具可用时必须 fan-out；若确实不可用（受限环境），退回单会话依次完成三视角，并在报告中标注"本次为单会话降级执行，结论未经 fresh-context 独立复核"。
 
 ## Composition
 
-- **触发：** 自然语言「发布前审查」「ship review」「上线审查」「发布就绪」
-- **不调用其他 persona：** 三视角由本 skill 在当前会话内依次完成，不委托 `code-reviewer` / `security-auditor` / `test-engineer` subagent（orchestration belongs to skills, not personas）。
+- **触发：** 自然语言「发布前审查」「ship review」「上线审查」「发布就绪」「go/no-go」
+- **编排：** 主会话用 `task` 工具并行委托 `code-reviewer` / `security-auditor` / `test-engineer`（fresh context），汇总后给出 go/no-go。插件路由表与 fan-out 检测与本 skill 一致，不冲突。
 - **与 design-review 的区别：** design-review 审设计制品（架构/规格），四视角；ship-review 审即将发布的变更 diff，三视角。一个在 Design 阶段，一个在 Ship 阶段。
