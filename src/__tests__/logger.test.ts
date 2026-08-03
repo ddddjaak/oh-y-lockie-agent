@@ -5,15 +5,19 @@ import { fileURLToPath } from "node:url";
 
 // Isolate from the real ~/.opencode/oh-y-lockie-agent dir — logger writes its
 // debug.log under node:os.homedir(), so stub homedir to an isolated path.
+// The stub must live under tmpdir: a path at filesystem root (e.g.
+// /lockie-logger-home) is unwritable for the unprivileged runner on Linux CI,
+// where mkdirSync fails with EACCES and logger's non-fatal catch swallows it —
+// debug.log is then never written and the file-persistence tests fail.
 vi.mock("node:os", () => ({
   homedir: () =>
-    process.platform === "win32" ? "C:\\lockie-logger-home" : "/lockie-logger-home",
+    (process.platform === "win32" ? "C:\\lockie-logger-tmp" : "/tmp") + "/lockie-logger-home",
   tmpdir: () =>
     process.platform === "win32" ? "C:\\lockie-logger-tmp" : "/tmp",
 }));
 
 const LOGGER_DIR = join(
-  process.platform === "win32" ? "C:\\lockie-logger-home" : "/lockie-logger-home",
+  (process.platform === "win32" ? "C:\\lockie-logger-tmp" : "/tmp") + "/lockie-logger-home",
   ".opencode",
   "oh-y-lockie-agent",
 );
