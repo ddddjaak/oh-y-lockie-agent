@@ -1,10 +1,13 @@
 {
   "name": "oh-y-lockie-agent",
-  "version": "1.1.2",
-  "description": "芯片系统架构师 + 嵌入式工程师双管线智能编排插件 — OpenCode即插即用。含2主Agent+14Subagent+62Skill(55 opencode + 7 agents)。自然语言触发，无需 slash 命令。",
+  "version": "1.2.0",
+  "description": "芯片系统架构师 + 嵌入式工程师双管线智能编排插件 — OpenCode即插即用。含2主Agent+14Subagent+63Skill(56 opencode + 7 agents)。自然语言触发，无需 slash 命令。",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "oh-y-lockie-agent": "scripts/setup-mcp.mjs"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",

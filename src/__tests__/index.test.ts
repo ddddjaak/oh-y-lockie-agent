@@ -41,6 +41,17 @@ describe("config hook", () => {
     expect(agent["code-reviewer"]).toBeDefined();
   });
 
+  it("injects the skill routing table into each agent's prompt (guaranteed channel)", async () => {
+    const hooks = await getHooks();
+    const cfg: Record<string, unknown> = {};
+    await hooks.config!(cfg as never);
+
+    const agent = cfg.agent as Record<string, { prompt?: string }>;
+    expect(agent.architect!.prompt).toContain(ROUTE_MARKER);
+    expect(agent.architect!.prompt).toContain("lockie_load_skill");
+    expect(agent.firmware!.prompt).toContain(ROUTE_MARKER);
+  });
+
   it("does NOT clobber agents the user already defined", async () => {
     const hooks = await getHooks();
     const userDefined = { model: "user/custom-model", prompt: "user prompt" };
@@ -108,6 +119,10 @@ describe("chat.message hook", () => {
     const routed = parts[0] as { text: string; synthetic?: boolean };
     expect(routed.text).toContain("[SKILL_ROUTE]");
     expect(routed.synthetic).toBe(true);
+    // The routing instruction MUST be visible to the model — `ignored` parts
+    // are excluded from model context in OpenCode, so it must NOT be set.
+    expect((routed as { ignored?: boolean }).ignored).not.toBe(true);
+    expect(routed.text).toContain("lockie_load_skill");
   });
 
   it("does not route when input matches no skill keyword", async () => {
@@ -159,6 +174,27 @@ describe("plugin tools", () => {
     expect(hooks.tool).toBeDefined();
     expect(hooks.tool!.lockie_list_agents).toBeDefined();
     expect(hooks.tool!.lockie_status).toBeDefined();
+    expect(hooks.tool!.lockie_load_skill).toBeDefined();
+  });
+
+  it("lockie_load_skill returns the full SKILL.md content of a bundled skill", async () => {
+    const hooks = await getHooks();
+    const tool = hooks.tool!.lockie_load_skill as {
+      execute: (args: { skill: string }) => Promise<string>;
+    };
+    const output = await tool.execute({ skill: "bootloader-design" });
+    expect(output).toContain("# bootloader-design");
+    expect(output).toContain("相关文件");
+  });
+
+  it("lockie_load_skill reports unknown skills with the available list", async () => {
+    const hooks = await getHooks();
+    const tool = hooks.tool!.lockie_load_skill as {
+      execute: (args: { skill: string }) => Promise<string>;
+    };
+    const output = await tool.execute({ skill: "no-such-skill-xyz" });
+    expect(output).toContain("未找到 skill");
+    expect(output).toContain("可用 skill");
   });
 
   it("lockie_list_agents returns categorized agents", async () => {

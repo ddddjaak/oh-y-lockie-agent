@@ -4,13 +4,24 @@
 // 设计原则：最小侵入 ~/.config/opencode/
 // - oh-y-lockie-agent.jsonc → 首次安装时自动生成配置模板（不覆盖已有文件）
 // - commands/   → 已移除（能力改由 skill + 自然语言路由提供，无需 slash 命令）
-// - agents/   → 不复制（config hook 注入 inline prompt）
-// - skills/   → 不复制（路由系统从插件目录读取）
+// - agents/     → 不复制（config hook 注入 inline prompt）
+// - skills/     → 复制到 ~/.config/opencode/skills/（仅补缺失、不覆盖用户已有），
+//                  让 OpenCode 原生 skill 工具可以发现它们；插件自身的路由索引仍从插件目录读取
 // - references/ → 不复制（文档，用户可从插件目录访问）
-import { existsSync, readFileSync, writeFileSync, copyFileSync, renameSync, mkdirSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+  renameSync,
+  mkdirSync,
+  cpSync,
+  readdirSync,
+} from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = join(__dirname, "..");
@@ -120,8 +131,69 @@ try {
     }
   }
 
+  // ─── Skills 复制到全局技能目录 ─────────────────────────────────
+  // OpenCode 原生 skill 工具只从 ~/.config/opencode/skills/ 等发现路径读取。
+  // 插件包内的 skills/ 不在发现路径内，所以安装时把它们复制到全局技能目录
+  // （仅补缺失、绝不覆盖用户已有同名 skill）。复制清单写入 manifest，
+  // 卸载时 preuninstall 据此只删除"仍与安装时内容一致"的目录。
+  console.log("[oh-y-lockie-agent] 检查 skills 复制...");
+  const SKILL_SOURCES = [join(PKG_ROOT, "skills", "opencode"), join(PKG_ROOT, "skills", "agents")];
+  const SKILLS_DEST = join(OPENCODE_DIR, "skills");
+  const MANIFEST_PATH = join(OPENCODE_DIR, ".oh-y-lockie-agent-skills.json");
+
+  let manifest = { skills: {} };
+  try {
+    if (existsSync(MANIFEST_PATH)) {
+      manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
+      if (!manifest.skills || typeof manifest.skills !== "object") manifest = { skills: {} };
+    }
+  } catch (e) {
+    console.warn(`  [警告] 读取 skills manifest 失败，将重建: ${e.message}`);
+    manifest = { skills: {} };
+  }
+
+  let skillsCopied = 0;
+  let skillsSkipped = 0;
+  for (const root of SKILL_SOURCES) {
+    if (!existsSync(root)) continue;
+    const source = root.endsWith("agents") ? "agents" : "opencode";
+    const dirs = readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    for (const dir of dirs) {
+      const skillDir = join(root, dir);
+      const skillPath = join(skillDir, "SKILL.md");
+      if (!existsSync(skillPath)) continue;
+      const destDir = join(SKILLS_DEST, dir);
+      if (existsSync(destDir)) {
+        skillsSkipped++;
+        continue; // 不覆盖用户已有 skill
+      }
+      try {
+        mkdirSync(SKILLS_DEST, { recursive: true });
+        cpSync(skillDir, destDir, { recursive: true });
+        const hash = createHash("sha256")
+          .update(readFileSync(skillPath, "utf-8"))
+          .digest("hex");
+        manifest.skills[dir] = { source, sha256: hash };
+        skillsCopied++;
+        console.log(`  [复制] skills/${source}/${dir} → ${destDir}`);
+      } catch (e) {
+        console.error(`  [失败] 复制 skill ${dir}: ${e.message}`);
+      }
+    }
+  }
+  if (skillsCopied > 0 || Object.keys(manifest.skills).length > 0) {
+    atomicWriteJson(MANIFEST_PATH, manifest);
+  }
+  console.log(
+    skillsCopied > 0
+      ? `  [OK] 已复制 ${skillsCopied} 个 skill 到 ${SKILLS_DEST}（跳过 ${skillsSkipped} 个已存在）`
+      : `  [OK] 无新增 skill 需要复制（已存在 ${skillsSkipped} 个同名目录，不覆盖）`,
+  );
+
   console.log("[oh-y-lockie-agent] postinstall: 完成");
-  console.log("[oh-y-lockie-agent] 提示: agents/skills 通过插件 config hook 注入，无需复制到 ~/.config/opencode/");
+  console.log("[oh-y-lockie-agent] 提示: agents 通过插件 config hook 注入；skills 已复制到 ~/.config/opencode/skills/（原生 skill 工具可发现）");
 } catch (e) {
   console.error(`[oh-y-lockie-agent] postinstall 失败: ${e.message}`);
   // Don't fail npm install — plugin still works via config hook

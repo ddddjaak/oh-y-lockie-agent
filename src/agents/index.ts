@@ -16,7 +16,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk";
 import type { AgentDef, AgentOverride } from "./types.js";
 import { resolveAgentModel, type ModelProbe } from "../models.js";
-import { log } from "../logger.js";
+import { log, warn } from "../logger.js";
 import * as defs from "./definitions.js";
 
 export * from "./types.js";
@@ -91,7 +91,12 @@ export function collectAgents(
 
     // Smart resolution (probe or no gate).
     const resolved = resolveAgentModel(ov, gate, def.defaultModel);
-    if (resolved.reason !== "no-probe" && resolved.reason !== "default") {
+    if (resolved.reason === "fallback-any") {
+      warn(
+        `agent ${name}: 未找到匹配模型，回退到任意可用模型 "${resolved.model}" — ` +
+          `建议在 oh-y-lockie-agent.jsonc 中为该 agent 显式配置 model`,
+      );
+    } else if (resolved.reason !== "no-probe" && resolved.reason !== "default") {
       log(`agent ${name}: model "${resolved.model}" (${resolved.reason})`);
     }
     out[name] = buildAgent(def, resolved.model);

@@ -41,7 +41,9 @@
 npm install -g oh-y-lockie-agent
 ```
 
-`postinstall` 脚本会自动把 4 个 MCP 服务写入 `~/.config/opencode/opencode.json`（仅添加缺失项，不覆盖已有）。之后仍需在 `plugin` 数组中引用裸名 `"oh-y-lockie-agent"`。
+`postinstall` 脚本会自动把 4 个 MCP 服务写入 `~/.config/opencode/opencode.json`
+（仅添加缺失项，不覆盖已有），并把 63 个 skill 复制到 `~/.config/opencode/skills/`
+（让 OpenCode 原生 `skill` 工具可发现）。之后仍需在 `plugin` 数组中引用裸名 `"oh-y-lockie-agent"`。
 
 ### 验证
 
@@ -67,9 +69,23 @@ opencode TUI 渲染到输入框区域，污染界面——v1.1.1 起改为日志
 |------|----------|----------------------|
 | `config hook` 运行时注入 | 每次启动 OpenCode | 否（注册到进程，不持久化） |
 | `postinstall` 脚本 | `npm install -g` 时 | 是（写入 mcp 段，仅添加缺失项） |
-| `setup-mcp` 手动命令 | `npx oh-y-lockie-agent setup-mcp` | 是 |
+| `setup-mcp` 手动命令 | `npx oh-y-lockie-agent setup-mcp`（或 `npm run setup-mcp`） | 是 |
 
 > 三者互不冲突：若 opencode.json 已有同名 MCP，插件不会覆盖。裸名引用方式下 `config hook` 已足够，无需 postinstall。
+
+---
+
+### Skills 如何被发现
+
+插件随附 63 个 `SKILL.md`（`skills/opencode/` 56 个 + `skills/agents/` 7 个），有两条加载通道：
+
+1. **原生 `skill` 工具**：`npm install -g` 时 postinstall 会把 63 个 skill 复制到 `~/.config/opencode/skills/`
+   （仅补缺失、绝不覆盖用户已有同名 skill；卸载时按 manifest 只清理未改动的目录）。
+2. **`lockie_load_skill` 工具（插件自带，最可靠）**：直接从插件包内读取 SKILL.md 全文，
+   不依赖 OpenCode 的 skill 发现路径。路由指令会优先让模型调用它，它不可用时再退回内置 `skill` 工具。
+
+> 路由表与路由指令会注入到每个 lockie agent 的 prompt（config hook 注入 agent 时完成），
+> 因此不依赖 `experimental.chat.system.transform` 这类实验性 hook 是否被运行时接受。
 
 ---
 
@@ -82,14 +98,17 @@ oh-y-lockie-agent (Plugin)
 │   ├── index.ts          # OpenCode Plugin 入口
 │   │   ├── config hook              ── collectAgents() 注入 agent + MCP 配置 + 更新提醒
 │   │   ├── chat.message hook        ── 意图分类 → 自动路由 skill
-│   │   ├── experimental.chat.system.transform hook
-│   │   │                            ── 注入 Skill Routing Table 到 system prompt
-│   │   └── tool                     ── lockie_list_agents / lockie_status
+│   │   └── tool                     ── lockie_list_agents / lockie_status / lockie_load_skill
 │   │
 │   ├── config.ts         # 配置加载（3 级优先级链 + 合并 overrides/mcp/updateCheck）
+│   ├── config-schema.ts  # zod 配置校验 schema
+│   ├── intent.ts         # 意图分类 + 中英双语 SKILL_TRIGGERS + fan-out 检测
+│   ├── models.ts         # provider 模型探测 + 智能解析（过滤非对话模型）
+│   ├── context.ts        # 目标芯片上下文 + 参考文档索引 + 路由表注入 agent prompt
 │   ├── logger.ts         # 日志门面（LOCKIE_DEBUG 控制 stdout + debug.log 文件轮转）
 │   ├── update-checker.ts # 版本更新提醒（npm registry 检查 + TUI toast + 日志兜底）
-│   ├── skills.ts         # Skill 匹配引擎（关键词提取 + 评分匹配）
+│   ├── telemetry.ts      # 路由遥测（仅记录匹配元数据，不含用户内容）
+│   ├── skills.ts         # Skill 匹配引擎 + lockie_load_skill 内容加载
 │   ├── mcp.ts            # MCP 诊断 / 注入
 │   ├── agents/           # Agent 定义（definitions / index / prompts / types）
 │   └── __tests__/        # 单元测试（vitest）
@@ -115,12 +134,17 @@ oh-y-lockie-agent (Plugin)
 
 `chat.message` hook 监听每次对话，对用户输入进行关键词评分匹配：
 
-- 从所有 SKILL.md 的 description 字段提取触发关键词
-- 按关键词长度加权评分（长词 ≥4 字符权重 3，短词权重 1）
-- 评分 ≥2 时自动在响应中注入 `[SKILL_ROUTE]` 指令
-- `experimental.chat.system.transform` hook 在 system prompt 中注入路由表
+- 先做**意图分类**（design / review / debug / build / ship / plan / qa，规则信号词，中英双语），
+  再在意图对应的 skill 子集内做关键词评分匹配（≥2 分命中），避免跨类别误路由
+- 命中后在用户消息前注入 `[SKILL_ROUTE]` 指令，让模型调用 `lockie_load_skill` 加载对应 skill
+- 路由表（按意图分组）会注入到**每个 lockie agent 的 prompt**，保证模型能看到
+- "全面审查 / 多角度审查"触发 fan-out 指令（并行调 3 个审查 agent）；"ship review / 发布前审查"路由到 `ship-review` skill
+- 每次路由尝试都会写入本地遥测（`~/.opencode/oh-y-lockie-agent/telemetry-routes.jsonl`），用于定位路由词表缺口
 
 > 命令层已移除：能力全部由 Skill 通过自然语言触发（例如「进行架构评审」「帮我做引脚复用分配」「生成内存映射」）。无需记忆 `/xxx` 命令名。
+
+> 注意：插件默认配置禁用了 OpenCode 自带的 `explore` / `general` agent
+> （见 `config/oh-y-lockie-agent.jsonc`）。如不需要，删除对应 `disable` 配置即可恢复。
 
 ---
 
@@ -181,6 +205,7 @@ oh-y-lockie-agent (Plugin)
 
 - **`lockie_list_agents`** — 列出所有可用的 agent，支持按分类筛选（`all` / `design` / `review` / `domain` / `quality`）
 - **`lockie_status`** — 插件健康检查：活跃 agent 与各自解析到的模型、skill 索引、MCP 服务器状态、配置链、遥测开关、目标芯片上下文
+- **`lockie_load_skill`** — 按名称加载插件随附 skill 的完整内容（SKILL.md + 相关文件清单），支持模糊匹配
 
 ---
 

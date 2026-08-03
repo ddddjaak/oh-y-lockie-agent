@@ -40,7 +40,33 @@ export interface ProviderLike {
 }
 
 /**
+ * Substrings that identify clearly non-chat models. The probe indexes every
+ * model a provider declares; blindly including embedding/audio/image models in
+ * the fallback pool could hand an agent a model that cannot hold a dialogue.
+ */
+const NON_CHAT_TOKENS = [
+  "embedding", "embeddings", "whisper", "tts", "speech", "stt", "transcri",
+  "dall-e", "dalle", "sdxl", "stable-diffusion", "flux", "moderation",
+  "rerank", "reranker", "image", "audio", "ttv", "video",
+];
+
+/**
+ * Whether a model ID looks chat-capable. Conservative: only excludes models
+ * whose base name clearly matches a non-dialogue category. Vision-capable chat
+ * models (e.g. gpt-4o, qwen-vl) are NOT excluded.
+ */
+export function isLikelyChatModel(modelKey: string): boolean {
+  const base = modelKey.split("/").pop() ?? modelKey;
+  const lower = base.toLowerCase();
+  return !NON_CHAT_TOKENS.some((t) => lower.includes(t));
+}
+
+/**
  * Probe a Config.provider map and index every declared model.
+ *
+ * Non-chat models (embeddings, whisper, image generation, rerankers, ...) are
+ * excluded from the index so fallback resolution never lands on a model that
+ * cannot converse.
  *
  * @param provider Config's provider section (may be undefined).
  * @returns A ModelProbe. `any` is empty when nothing is declared — callers
@@ -61,6 +87,7 @@ export function probeModels(
 
   for (const [providerID, pconf] of Object.entries(provider)) {
     for (const modelKey of Object.keys(pconf?.models ?? {})) {
+      if (!isLikelyChatModel(modelKey)) continue;
       const full = `${providerID}/${modelKey}`;
       available.add(full);
       any.push(full);

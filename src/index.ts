@@ -14,10 +14,18 @@ import {
   buildAgentCategoryMap,
   agentSources,
 } from "./agents/index.js";
-import { probeFromRawProvider } from "./models.js";
-import { injectTargetContext, buildReferenceIndex, REFERENCE_MARKER } from "./context.js";
+import { probeFromRawProvider, resolveAgentModel } from "./models.js";
+import { injectTargetContext, injectSkillRouting, buildReferenceIndex, REFERENCE_MARKER } from "./context.js";
 import type { AgentOverride } from "./agents/types.js";
-import { buildSkillTable, matchSkillDetail, SKILL_ROUTE_TABLE, ROUTE_MARKER } from "./skills.js";
+import {
+  buildSkillTable,
+  matchSkillDetail,
+  loadSkillContent,
+  listSkillNames,
+  SKILL_LOAD_TOOL_NAME,
+  SKILL_ROUTE_TABLE,
+  ROUTE_MARKER,
+} from "./skills.js";
 import type { SkillEntry } from "./skills.js";
 import { classifyIntentWithDetail, detectFanout } from "./intent.js";
 import { diagnoseMcpStatus } from "./mcp.js";
@@ -120,6 +128,27 @@ const lockieStatusTool = tool({
     const missing = getAgentKeys().filter((k) => !activeKeys.includes(k));
     if (missing.length) lines.push(`  已禁用: ${missing.join(", ")}`);
 
+    // Model-fallback warnings — surface silent degradation so users know when
+    // an agent is NOT running on its intended model.
+    const fallbackLines: string[] = [];
+    for (const name of activeKeys) {
+      const def = agentSources[name];
+      if (!def) continue;
+      const r = resolveAgentModel(overrides[name], probe, def.defaultModel);
+      if (r.reason === "fallback-any") {
+        fallbackLines.push(
+          `  ⚠ ${name} -> "${r.model}"（默认模型不可用，回退到任意可用模型 — 建议在 oh-y-lockie-agent.jsonc 中显式配置 model）`,
+        );
+      } else if (r.reason.startsWith("override-unavailable")) {
+        fallbackLines.push(`  ⚠ ${name} -> "${r.model}"（配置的模型不可用，已回退）`);
+      }
+    }
+    if (fallbackLines.length > 0) {
+      lines.push("");
+      lines.push("[agents] 模型回退警告:");
+      lines.push(...fallbackLines);
+    }
+
     // 2. Skills
     lines.push("");
     lines.push(`[skills] ${skillTable.length} 个已索引 (skills/opencode)`);
@@ -150,6 +179,38 @@ const lockieStatusTool = tool({
     }
 
     return lines.join("\n");
+  },
+});
+
+/**
+ * On-demand skill loader. The plugin ships 63 SKILL.md files under its own
+ * `skills/` directory, which the runtime's native `skill` tool may not
+ * discover (it only scans .opencode/skills, ~/.config/opencode/skills,
+ * .claude/skills and .agents/skills). Routing instructions therefore point
+ * the model at this tool: it reads the skill content straight from the
+ * plugin package, so loading works regardless of discovery paths.
+ */
+const lockieLoadSkillTool = tool({
+  description:
+    "加载 oh-y-lockie-agent 插件随附的 skill 内容（SKILL.md 全文 + 相关文件清单）。" +
+    "当路由指令提到某个 skill 时，先用本工具获取它的完整指令，再按指令工作。" +
+    "支持模糊名称（如 bootloader、register-map）。",
+  args: {
+    skill: z.string().describe("要加载的 skill 名称"),
+  },
+  async execute(args) {
+    const loaded = loadSkillContent(args.skill);
+    if (!loaded) {
+      const available = listSkillNames();
+      return `未找到 skill "${args.skill}"。可用 skill（${available.length} 个）:\n${available.join("\n")}`;
+    }
+    const related =
+      loaded.relatedFiles.length > 0 ? loaded.relatedFiles.map((f) => `- ${f}`).join("\n") : "(无相关文件)";
+    return (
+      `# ${loaded.name} (来源: skills/${loaded.source})\n\n` +
+      `${loaded.content}\n\n` +
+      `相关文件（同目录，需要时用 Read 读取）:\n${related}`
+    );
   },
 });
 
@@ -263,7 +324,11 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
       // Enrich each agent's prompt with the configured target-chip context
       // (chip/family/sdk/toolchain). Empty target → no-op, zero overhead.
       const enriched = injectTargetContext(agents, targetContext);
-      for (const [key, val] of Object.entries(enriched)) {
+      // Append the skill routing table to every agent prompt — guaranteed
+      // delivery channel (agent prompt is part of the system prompt), unlike
+      // experimental.chat.system.transform whose mutations some runtimes drop.
+      const routed = injectSkillRouting(enriched);
+      for (const [key, val] of Object.entries(routed)) {
         if (!(key in agentTarget)) {
           agentTarget[key] = val;
         }
@@ -322,7 +387,7 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
       if (fanout.fanout) {
         const instruction =
           fanout.skill === "ship-review"
-            ? `[SKILL_ROUTE] 用户请求发布前审查（fan-out）。请先用 skill 工具加载 "ship-review" skill，它协调代码/安全/测试三视角审查并汇总 go/no-go。`
+            ? `[SKILL_ROUTE] 用户请求发布前审查（fan-out）。请先调用 ${SKILL_LOAD_TOOL_NAME} 工具加载 "ship-review" skill（若该工具不可用则用内置 skill 工具），它协调代码/安全/测试三视角审查并汇总 go/no-go。`
             : `[SKILL_ROUTE] 用户请求多视角审查（fan-out）。请用 agent 工具并行调用 ${fanout.agents.join("、")} 进行多视角审查，然后汇总各 agent 结论给出综合判断。`;
         msgOutput.parts.unshift({
           id: textPart.id || randomUUID(),
@@ -331,7 +396,6 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
           type: "text",
           text: instruction,
           synthetic: true,
-          ignored: true,
           time: { start: Date.now() },
         });
         recordRouteEvent({
@@ -365,9 +429,10 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
         sessionID: msgInput.sessionID,
         messageID: msgInput.messageID ?? msgOutput.message.id,
         type: "text",
-        text: `[SKILL_ROUTE] (intent=${intent}) 请先用 skill 工具加载 "${match.name}" skill，再用该 skill 的指令处理用户问题。`,
+        text:
+          `[SKILL_ROUTE] (intent=${intent}) 请先调用 ${SKILL_LOAD_TOOL_NAME} 工具加载 "${match.name}" skill，` +
+          `再用该 skill 的指令处理用户问题（若 ${SKILL_LOAD_TOOL_NAME} 不可用，则用内置 skill 工具加载同名 skill）。`,
         synthetic: true,
-        ignored: true,
         time: { start: Date.now() },
       });
       log(`skill route: "${match.name}" (intent=${intent})`);
@@ -393,6 +458,7 @@ const lockieServer = async (input: PluginInput): Promise<Hooks> => {
     tool: {
       lockie_list_agents: lockieListAgentsTool,
       lockie_status: lockieStatusTool,
+      [SKILL_LOAD_TOOL_NAME]: lockieLoadSkillTool,
     },
 
     "tool.execute.before": async (_input, output) => {

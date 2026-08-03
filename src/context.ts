@@ -20,6 +20,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SKILL_ROUTE_TABLE, ROUTE_MARKER } from "./skills.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // src/context.ts → ../references (works both from src/ under vitest and from
@@ -82,6 +83,31 @@ export function injectTargetContext<T extends { prompt?: string }>(
   for (const [name, cfg] of Object.entries(agents)) {
     if (typeof cfg.prompt === "string" && !cfg.prompt.includes(TARGET_MARKER)) {
       out[name] = { ...cfg, prompt: cfg.prompt + block };
+      changed = true;
+    } else {
+      out[name] = cfg;
+    }
+  }
+  return changed ? out : agents;
+}
+
+/**
+ * Append the skill routing table to every agent's prompt (idempotent).
+ *
+ * WHY: the routing table is also injected through
+ * `experimental.chat.system.transform`, but that hook's mutations are silently
+ * discarded by some OpenCode runtimes (see anomalyco/opencode#17100). An agent's
+ * `prompt` is part of its system prompt, so appending the table here guarantees
+ * the model can see which skill to load regardless of the experimental hook.
+ */
+export function injectSkillRouting<T extends { prompt?: string }>(
+  agents: Record<string, T>,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  let changed = false;
+  for (const [name, cfg] of Object.entries(agents)) {
+    if (typeof cfg.prompt === "string" && !cfg.prompt.includes(ROUTE_MARKER)) {
+      out[name] = { ...cfg, prompt: cfg.prompt + "\n\n" + SKILL_ROUTE_TABLE };
       changed = true;
     } else {
       out[name] = cfg;

@@ -401,7 +401,11 @@ export function buildRouteTableFromMap(): string {
   lines.push("");
   lines.push("## Skill Routing Table");
   lines.push("");
-  lines.push("When you receive a user request, check this routing table BEFORE answering. If the task matches a row, use the `skill` tool to load the corresponding skill.");
+  lines.push(
+    "When you receive a user request, check this routing table BEFORE answering. " +
+      "If the task matches a row, load the corresponding skill with the `lockie_load_skill` tool " +
+      "(a tool provided by this plugin). If `lockie_load_skill` is unavailable, fall back to the built-in `skill` tool.",
+  );
   lines.push("");
 
   const intentOrder: Intent[] = ["design", "review", "debug", "build", "ship", "plan", "qa"];
@@ -418,7 +422,7 @@ export function buildRouteTableFromMap(): string {
   }
 
   lines.push("### Rule");
-  lines.push("- If the user's intent maps to exactly one skill, LOAD IT immediately via the `skill` tool.");
+  lines.push("- If the user's intent maps to exactly one skill, LOAD IT immediately via `lockie_load_skill` (fallback: built-in `skill` tool).");
   lines.push("- If the user asks for a comprehensive / multi-perspective review (全面审查/多角度), fan-out to multiple review agents (code-reviewer, security-auditor, test-engineer) or load `ship-review`.");
   lines.push("- If ambiguous (maps to 2+), pick the most specific one or ask the user.");
   lines.push("- If no match, proceed without loading a skill.");

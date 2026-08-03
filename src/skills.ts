@@ -9,10 +9,14 @@
  */
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildRouteTableFromMap, skillsForIntent, getSkillTriggers } from "./intent.js";
 import type { Intent } from "./intent.js";
 import { log, warn, error } from "./logger.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PKG_ROOT = join(__dirname, "..");
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -238,6 +242,112 @@ export function matchSkillDetail(userText: string, skillTable: SkillEntry[], int
 /** Backward-compatible wrapper: returns just the SkillEntry. */
 export function matchSkill(userText: string, skillTable: SkillEntry[], intent?: Intent): SkillEntry | null {
   return matchSkillDetail(userText, skillTable, intent)?.entry ?? null;
+}
+
+// ─── On-demand skill loading ─────────────────────────────────────
+
+/** Name of the plugin-provided skill-loading tool (see src/index.ts). */
+export const SKILL_LOAD_TOOL_NAME = "lockie_load_skill";
+
+export interface LoadedSkill {
+  name: string;
+  /** Directory the skill lives in: "opencode" | "agents". */
+  source: string;
+  /** Full SKILL.md content. */
+  content: string;
+  /** Relative paths of supporting files (scripts/references/assets). */
+  relatedFiles: string[];
+}
+
+/** Plugin skill roots, ordered: opencode skills first, then agent skills. */
+export function skillRoots(): string[] {
+  return [
+    join(PKG_ROOT, "skills", "opencode"),
+    join(PKG_ROOT, "skills", "agents"),
+  ];
+}
+
+/**
+ * List all skill names discoverable under the plugin's skills directories.
+ * Falls back to a directory scan when a SKILL.md frontmatter is missing.
+ */
+export function listSkillNames(): string[] {
+  const names: string[] = [];
+  for (const root of skillRoots()) {
+    if (!existsSync(root)) continue;
+    for (const dir of readdirSync(root, { withFileTypes: true })) {
+      if (!dir.isDirectory()) continue;
+      const skillPath = join(root, dir.name, "SKILL.md");
+      if (!existsSync(skillPath)) continue;
+      try {
+        const fm = parseFrontmatter(readFileSync(skillPath, "utf-8"));
+        names.push(fm?.name ?? dir.name);
+      } catch {
+        names.push(dir.name);
+      }
+    }
+  }
+  return names.sort();
+}
+
+/**
+ * Load a skill's SKILL.md content (and supporting-file list) from the
+ * plugin's own skills directories. This is what the `lockie_load_skill`
+ * tool uses — it makes the bundled skills loadable regardless of whether
+ * the runtime's native `skill` tool can discover them.
+ *
+ * Matching order: exact name → name contains query → normalized name
+ * (hyphens/spaces removed) contains normalized query.
+ *
+ * @returns The loaded skill, or null when nothing matches.
+ */
+export function loadSkillContent(query: string): LoadedSkill | null {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+
+  const scan = (): Array<{ name: string; source: string; dir: string }> => {
+    const found: Array<{ name: string; source: string; dir: string }> = [];
+    for (const root of skillRoots()) {
+      if (!existsSync(root)) continue;
+      const source = root.endsWith("agents") ? "agents" : "opencode";
+      for (const d of readdirSync(root, { withFileTypes: true })) {
+        if (!d.isDirectory()) continue;
+        const skillPath = join(root, d.name, "SKILL.md");
+        if (!existsSync(skillPath)) continue;
+        try {
+          const fm = parseFrontmatter(readFileSync(skillPath, "utf-8"));
+          found.push({ name: fm?.name ?? d.name, source, dir: join(root, d.name) });
+        } catch (err) {
+          error(`skill ${d.name}: failed to read SKILL.md:`, err);
+        }
+      }
+    }
+    return found;
+  };
+
+  const skills = scan();
+  const exact = skills.find((s) => s.name.toLowerCase() === q);
+  if (exact) return readLoadedSkill(exact);
+
+  const contains = skills.find((s) => s.name.toLowerCase().includes(q));
+  if (contains) return readLoadedSkill(contains);
+
+  const normQ = q.replace(/[\s-]+/g, "");
+  const normalized = skills.find((s) => s.name.toLowerCase().replace(/[\s-]+/g, "").includes(normQ));
+  if (normalized) return readLoadedSkill(normalized);
+
+  return null;
+}
+
+/** Read SKILL.md content + list supporting files for a located skill. */
+function readLoadedSkill(skill: { name: string; source: string; dir: string }): LoadedSkill {
+  const skillPath = join(skill.dir, "SKILL.md");
+  const content = readFileSync(skillPath, "utf-8");
+  const relatedFiles = readdirSync(skill.dir, { withFileTypes: true })
+    .filter((f) => f.isFile() && f.name !== "SKILL.md")
+    .map((f) => f.name)
+    .sort();
+  return { name: skill.name, source: skill.source, content, relatedFiles };
 }
 
 // ─── Routing table (system prompt injection) ─────────────────────

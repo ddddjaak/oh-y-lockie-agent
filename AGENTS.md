@@ -2,7 +2,7 @@
 
 > **oh-y-lockie-agent** 是一个 OpenCode 插件，提供芯片系统设计（SE）和嵌入式固件开发（AE）双管线智能编排。包含 2 个主 Agent、14 个 Subagent、63 个 Skill（56 opencode + 7 agents）。
 
-**生成日期:** 2026-08-01 | **版本:** 1.0.2
+**生成日期:** 2026-08-04 | **版本:** 1.2.0
 
 ---
 
@@ -81,18 +81,35 @@ OpenCode 运行时
 ```
 oh-y-lockie-agent/
 ├── src/                          # 插件源码
-│   ├── index.ts                  # 入口：PluginModule 定义，hook 注册
-│   ├── config.ts                 # 配置加载器（3 级优先级链 + 合并 overrides/mcp）
-│   ├── skills.ts                 # Skill 匹配引擎（关键词路由 + 评分）
+│   ├── index.ts                  # 入口：PluginModule 定义，hook + 工具注册
+│   ├── config.ts                 # 配置加载器（3 级优先级链 + 合并 overrides/mcp/telemetry/updateCheck/target）
+│   ├── config-schema.ts          # zod 配置 schema（单一真相源）
+│   ├── intent.ts                 # 意图分类（7 类）+ 中英双语 SKILL_TRIGGERS + fan-out 检测
+│   ├── models.ts                 # provider 模型探测 + 智能解析（过滤非对话模型）
+│   ├── context.ts                # 目标芯片上下文 + 参考文档索引 + 路由表注入 agent prompt
+│   ├── logger.ts                 # 日志门面（LOCKIE_DEBUG + debug.log 轮转）
+│   ├── telemetry.ts              # 路由遥测（JSONL，仅匹配元数据）
+│   ├── update-checker.ts         # 版本更新提醒（npm registry + TUI toast）
+│   ├── mcp.ts                    # MCP 诊断 / 原子写注入
+│   ├── skills.ts                 # Skill 匹配引擎 + loadSkillContent（lockie_load_skill 工具后端）
 │   ├── agents/                   # Agent 注册表（factory + registry 结构）
 │   │   ├── types.ts              # AgentFactory / AgentMode / AgentOverride
 │   │   ├── prompts.ts            # loadPrompt() 读取 agents/*.md
 │   │   ├── definitions.ts        # 16 个 agent 工厂（静态 mode/defaultModel）
 │   │   ├── index.ts              # agentSources 注册表 + buildAgent + collectAgents
 │   │   └── __tests__/agents.test.ts
-│   └── __tests__/                # 单元测试
+│   └── __tests__/                # 单元测试（12 个测试文件）
 │       ├── config.test.ts
-│       └── skills.test.ts
+│       ├── context.test.ts
+│       ├── index.test.ts
+│       ├── intent.test.ts
+│       ├── intent-evals.test.ts
+│       ├── logger.test.ts
+│       ├── mcp.test.ts
+│       ├── models.test.ts
+│       ├── skills.test.ts
+│       ├── telemetry.test.ts
+│       └── update-checker.test.ts
 ├── agents/                       # Agent prompt 文件（16 个 .md）
 │   ├── architect.md              # SE 主 Agent
 │   ├── firmware.md               # AE 主 Agent
@@ -176,20 +193,28 @@ oh-y-lockie-agent/
 │   └── oh-y-lockie-agent.jsonc   # 插件默认配置（Agent model 映射）
 ├── .mcp.json                      # 规范 MCP 服务器定义（Claude Code 格式）
 ├── scripts/
-│   ├── postinstall.mjs           # npm install 后复制 commands + 注入 MCP
-│   ├── preuninstall.mjs          # npm uninstall 前清理
-│   └── setup-mcp.mjs             # MCP 配置工具（独立运行）
+│   ├── postinstall.mjs           # npm install 后：注入 MCP + 复制 skills 到全局技能目录 + 生成配置模板
+│   ├── preuninstall.mjs          # npm uninstall 前：清理 MCP 条目 / 配置模板 / 复制的 skills（按 manifest 安全清理）
+│   ├── setup-mcp.mjs             # MCP 配置工具（npm run setup-mcp 或 npx oh-y-lockie-agent setup-mcp）
+│   └── analyze-telemetry.mjs     # 路由遥测分析
 ├── references/                   # 5 份参考文档
 │   ├── accessibility-checklist.md
 │   ├── orchestration-patterns.md
 │   ├── performance-checklist.md
 │   ├── security-checklist.md
 │   └── testing-patterns.md
+├── docs/                         # 团队技术文档
+│   ├── architecture-comparison.md
+│   ├── diff-vs-published.md
+│   ├── embedded-mcp-roadmap.md
+│   ├── pr-review-checklist.md
+│   └── typescript-coding-standards.md
+├── overview.md                   # 团队交付总览（历史文档）
 ├── .codegraph/                   # CodeGraph 索引
 ├── .omo/                         # AI 工作区状态
 │   └── run-continuation/         # 运行延续会话
 ├── .sisyphus/                    # 旧工作区（迁移中）
-├── package.json
+├── package.json                  # 含 bin: oh-y-lockie-agent → scripts/setup-mcp.mjs
 ├── tsconfig.json
 ├── vitest.config.ts
 ├── AGENTS.md                     # 本文件
@@ -246,7 +271,7 @@ oh-y-lockie-agent/
 
 ## Command 层（已移除）
 
-> 自 v2.0.0 起，slash command 层已移除。原有 21 个命令的工作流已全部并入 Skill：
+> 自 v1.0.0 起，slash command 层已移除。原有 21 个命令的工作流已全部并入 Skill：
 > - 4 个领域专属工作流（pinmux / register-map / memory-map / power-tree）已提升为独立 Skill（见 `skills/opencode/`）；
 > - 其余命令本就是对应 Skill / Agent 的调用器，删去命令不影响能力。
 >
@@ -393,19 +418,22 @@ MCP 服务器定义在配置文件的 `mcp` 段，插件通过 `config` hook 注
 ```
 OpenCode 加载插件
   └─→ lockieServer(input)                          # src/index.ts
-        ├─→ loadPluginConfig(cwd)                  # 3 级优先级链 → { overrides, mcp }
-        ├─→ collectAgents(overrides)               # src/agents/index.ts：工厂 → AgentConfig 并应用 override
-        ├─→ buildSkillTable(skillsDir)             # 从插件目录构建 56+7 个 skill 索引
+        ├─→ loadPluginConfig(cwd)                  # 3 级优先级链 → { overrides, mcp, target, telemetry, updateCheck }
+        ├─→ collectAgents(overrides, probe)        # src/agents/index.ts：工厂 → AgentConfig，模型智能解析
+        ├─→ buildSkillTable(skillsDir)             # 从插件目录构建 56 个 opencode skill 索引
+        ├─→ injectSkillRouting(agents)             # 路由表注入每个 agent prompt（可靠通道）
         ├─→ diagnoseMcpStatus()                    # 检查 opencode.json MCP 配置
         ├─→ log active agent count                 # 输出已加载 agent 数量
         ├─→ 返回 Hooks 对象
-              ├─→ config(cfg)                      # 注入 agent（来自 collectAgents）+ MCP
+              ├─→ config(cfg)                      # 注入 agent（含路由表）+ MCP + 更新提醒
               │     ├─→ cfg.agent[key] = 仅注入未由用户定义的 agent（不覆盖用户已有项）
               │     ├─→ 按 overrides 对 built-in(explore/general) 设 { disable: true }
               │     └─→ cfg.mcp = { ...mcpConfig 仅补充缺失项 }
-              ├─→ chat.message                     # 路由 Skill（关键词匹配）
-              ├─→ experimental.chat.system.transform  # 注入 Skill 路由表
+              ├─→ chat.message                     # 意图分类 → fan-out 检测 → skill 评分路由 → 注入 [SKILL_ROUTE]
+              ├─→ experimental.chat.system.transform  # 补充注入路由表 + 参考文档索引（部分运行时可能丢弃，agent prompt 已兜底）
               ├─→ tool.lockie_list_agents          # 列出所有 agent
+              ├─→ tool.lockie_status               # 健康检查（含模型回退警告）
+              ├─→ tool.lockie_load_skill           # 按名加载插件随附 skill 内容
               └─→ dispose                          # 卸载清理
 ```
 
@@ -437,7 +465,10 @@ OpenCode 加载插件
 ### 配置管理
 
 **安装时自动配置（postinstall）：**
-每次 `npm install` 时，`postinstall.mjs` 会自动检查 `~/.config/opencode/opencode.json`，如果 MCP 服务器缺失则自动添加。
+每次 `npm install` 时，`postinstall.mjs` 会自动：
+- 检查 `~/.config/opencode/opencode.json`，MCP 服务器缺失则自动添加（仅补缺失，不覆盖）
+- 把 63 个 skill 复制到 `~/.config/opencode/skills/`（仅补缺失、不覆盖用户已有，manifest 记录用于安全卸载）
+- 首次生成用户级配置模板 `~/.config/opencode/oh-y-lockie-agent.jsonc`（不覆盖已有）
 
 **手动配置：**
 ```bash
@@ -528,8 +559,12 @@ npm run test:watch       # 监听模式
 
 测试覆盖:
 - `config.test.ts` — 配置加载、优先级链、合并逻辑
-- `skills.test.ts` — frontmatter 解析、关键词提取、匹配评分
+- `skills.test.ts` — frontmatter 解析、关键词提取、匹配评分、loadSkillContent
 - `agents/__tests__/agents.test.ts` — 注册表、collectAgents、模型覆盖、分类映射
+- `index.test.ts` — 三大 hook + 工具（含 lockie_load_skill）、路由指令不带 `ignored`
+- `models.test.ts` — 模型探测、非对话模型过滤、解析链
+- `intent.test.ts` / `intent-evals.test.ts` — 意图分类 + 触发词评估
+- `context.test.ts` / `mcp.test.ts` / `logger.test.ts` / `telemetry.test.ts` / `update-checker.test.ts` — 各子系统
 
 ### 修改验证门控
 
@@ -557,11 +592,11 @@ npm pack                 # 打包 .tgz
 npm install <package>.tgz
 # postinstall 会自动执行:
 #   MCP 服务器  → ~/.config/opencode/opencode.json（注入缺失的 MCP 条目）
+#   skills/     → ~/.config/opencode/skills/（复制 63 个，仅补缺失、不覆盖；manifest 记录）
 #   配置模板    → ~/.config/opencode/oh-y-lockie-agent.jsonc（首次生成，不覆盖已有）
 #
 # 以下内容通过插件 config hook 注入，无需复制:
 #   agents/     → 读取 .md 内容 → inline prompt 注入 cfg.agent
-#   skills/     → 从插件目录读取，路由系统直接使用
 #   references/ → 从插件目录访问，不复制
 ```
 
@@ -570,7 +605,8 @@ npm install <package>.tgz
 ```bash
 npm uninstall oh-y-lockie-agent
 # preuninstall 会清理:
-#   MCP 条目 → 从 opencode.json 删除
-#
-# agents/skills/references 从未复制，卸载后自动消失
+#   MCP 条目     → 从 opencode.json 删除
+#   配置模板     → 删除前备份 .bak
+#   复制的 skills → 按 manifest 只删除内容未改动的目录（用户改过的保留）
+# agents/references 从未复制，卸载后自动消失
 ```

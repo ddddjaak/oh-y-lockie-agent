@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { parseFrontmatter, extractKeywords, matchSkill } from "../skills.js";
+import {
+  parseFrontmatter,
+  extractKeywords,
+  matchSkill,
+  loadSkillContent,
+  listSkillNames,
+  SKILL_LOAD_TOOL_NAME,
+} from "../skills.js";
 import type { SkillEntry } from "../skills.js";
 
 // ─── parseFrontmatter ───────────────────────────────────────────
@@ -132,5 +139,53 @@ describe("matchSkill", () => {
 
   it("returns null for empty skill table", () => {
     expect(matchSkill("bootloader", [])).toBeNull();
+  });
+});
+
+// ─── loadSkillContent / listSkillNames ──────────────────────────
+
+describe("loadSkillContent", () => {
+  it("loads a real skill from the plugin's opencode skills directory by exact name", () => {
+    const loaded = loadSkillContent("bootloader-design");
+    expect(loaded).not.toBeNull();
+    expect(loaded!.name).toBe("bootloader-design");
+    expect(loaded!.source).toBe("opencode");
+    expect(loaded!.content).toContain("---");
+    expect(loaded!.content.toLowerCase()).toContain("bootloader");
+  });
+
+  it("matches by fuzzy name", () => {
+    const loaded = loadSkillContent("bootloader");
+    expect(loaded).not.toBeNull();
+    expect(loaded!.name).toBe("bootloader-design");
+  });
+
+  it("matches normalized names (hyphens/spaces removed)", () => {
+    const loaded = loadSkillContent("registermap");
+    expect(loaded).not.toBeNull();
+    expect(loaded!.name).toBe("register-map");
+  });
+
+  it("returns null for unknown skills", () => {
+    expect(loadSkillContent("no-such-skill-xyz")).toBeNull();
+  });
+
+  it("returns null for empty query", () => {
+    expect(loadSkillContent("   ")).toBeNull();
+  });
+});
+
+describe("listSkillNames", () => {
+  it("lists all bundled skills (56 opencode + 7 agents)", () => {
+    const names = listSkillNames();
+    expect(names.length).toBe(63);
+    expect(names).toContain("bootloader-design");
+    expect(names).toContain("company-docx-generator");
+  });
+});
+
+describe("SKILL_LOAD_TOOL_NAME", () => {
+  it("is the tool name the routing instructions reference", () => {
+    expect(SKILL_LOAD_TOOL_NAME).toBe("lockie_load_skill");
   });
 });

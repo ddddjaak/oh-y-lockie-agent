@@ -25,6 +25,34 @@ describe("probeModels", () => {
     const probe = probeModels({ bare: {}, "my-mimo": { models: { x: {} } } });
     expect(probe.any).toEqual(["my-mimo/x"]);
   });
+
+  it("excludes clearly non-chat models (embeddings/whisper/image) from the probe", () => {
+    const probe = probeModels({
+      p: {
+        models: {
+          "gpt-x": {},
+          "text-embedding-3": {},
+          "whisper-1": {},
+          "dall-e-3": {},
+          "rerank-2": {},
+        },
+      },
+    });
+    expect(probe.available.has("p/gpt-x")).toBe(true);
+    expect(probe.available.has("p/text-embedding-3")).toBe(false);
+    expect(probe.available.has("p/whisper-1")).toBe(false);
+    expect(probe.available.has("p/dall-e-3")).toBe(false);
+    expect(probe.available.has("p/rerank-2")).toBe(false);
+    expect(probe.any).toEqual(["p/gpt-x"]);
+  });
+
+  it("keeps vision-capable chat models (gpt-4o, qwen-vl) in the probe", () => {
+    const probe = probeModels({
+      p: { models: { "gpt-4o": {}, "qwen-vl-max": {} } },
+    });
+    expect(probe.available.has("p/gpt-4o")).toBe(true);
+    expect(probe.available.has("p/qwen-vl-max")).toBe(true);
+  });
 });
 
 describe("resolveAgentModel", () => {
